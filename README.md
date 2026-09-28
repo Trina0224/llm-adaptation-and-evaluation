@@ -1,349 +1,344 @@
-# LLM 調適與評估：從課程方法到知識、能力與系統效能
+# LLM Adaptation and Evaluation: Knowledge, Capability, and System Performance
 
-**2024–2026 技術整理與研究延伸**
+*Course review and research discussion, 2024–2026*
 
-LLM 的「效能改善」不只一種。提高回答正確率、降低微調所需記憶體、讓模型取得新資料，以及縮短推論延遲，改變的是不同部分。若沒有先指定改善目標，很容易把訓練成本下降當成部署加速，把檢索成功當成知識學習，或把某個測試分數上升當成通用能力提升。
+[繁體中文](README.zh-TW.md)
 
-本文以一門涵蓋三十四堂的 Udemy LLM 課程為起點，整理微調、壓縮、蒸餾、檢索與相關架構方法，再透過 2024–2026 年的研究，討論三個延伸問題：**新知識能否被模型穩定使用、教師能力能否有效轉移，以及較好的結果來自模型學習還是推論流程。**
+“Better LLM performance” can mean a more accurate answer, lower training memory, access to updated documents, or faster inference. These gains come from different changes. Without a clear target, it is easy to report cheaper fine-tuning as faster deployment, successful retrieval as learning, or a higher test score as a general improvement in capability.
 
-課程內容提供方法範圍，後續論文則提供檢查方法限制的實驗證據。本文沒有重現全部課程或論文實驗；研究發現依其原設定解讀，工程案例與評估建議則是由這些材料延伸的分析。
+This article starts with a 34-lesson Udemy course covering fine-tuning, compression, distillation, retrieval, and related architecture ideas. Papers from 2024–2026 provide the next part of the discussion: whether models can use new knowledge reliably, what students can learn from teachers, and how much better results depend on the inference workflow.
 
-## 一、課程整理：從模型訓練延伸到完整應用
+The research results below come from the cited studies, with their original experimental conditions. The engineering examples and evaluation suggestions are analysis based on that material. This article does not claim to reproduce every course notebook or paper experiment.
 
-### 1.1 課程中的 performance 涵蓋多種改善目標
+## 1. The course: from model training to the application
 
-課程材料中的 *Improving the Performance of Your LLM Beyond Fine Tuning*，使用的是較廣義的 performance：除了分類準確率與模型壓縮，也包含低成本調適、外部資訊整合、長文件處理與自動化訓練。
+### 1.1 Performance has several meanings here
 
-這和系統效能工程的切入點有所不同。後者通常從指定 workload 的延遲、吞吐量、記憶體占用或硬體利用率出發，定位瓶頸，再驗證最佳化結果。課程涉及的剪枝與蒸餾具有降低成本的意義，但整體更接近 LLM 改善方法的概覽，而不是一套以 serving、核心運算或硬體瓶頸為主線的最佳化流程。
+*Improving the Performance of Your LLM Beyond Fine Tuning* uses performance quite broadly. Alongside classification accuracy and model compression, it covers lower-cost adaptation, external knowledge, long-document processing, and automated training.
 
-因此，閱讀以下內容時，需要區分「答案品質」「知識取得」「訓練資源」「部署效率」。這些目標可能互相影響，但不能以其中一項的改善替另一項背書。
+In performance engineering, we usually start with a particular workload. We measure latency, throughput, memory use, or hardware utilization, find the bottleneck, make a change, and measure again. Pruning and distillation do have efficiency implications, but this course is closer to an overview of ways to improve an LLM application. It does not follow a single optimization path through serving, kernels, or hardware bottlenecks.
 
-### 1.2 三十四堂課的主題地圖
+That distinction matters when comparing the examples. Answer quality, access to information, training resources, and deployment efficiency need their own measurements. A gain in one does not establish a gain in the others.
 
-下表保留全部堂次的範圍，將重複內容視為概念回顧，而非另起一套定義。第 1–16 堂在既有課綱中主要以 Section／Lecture 編號呈現，因此依相關講義合併整理，不推定每一堂與特定主題的一對一對應。後續部分課名也未能確認具體工具或版本，表中只保留可支持的主題範圍。
+### 1.2 A map of the 34 lessons
 
-| 堂次 | 課程主題 | 整理內容 | 與後續討論的關係 |
+The table covers the full lesson range without treating each recap as a new method. Lessons 1–16 are grouped because the available outline mainly uses section and lecture numbers. Their topics come from the associated handouts; the table does not claim a verified one-to-one mapping for those lessons. Where a later title does not identify the exact tool or method, that limit remains visible.
+
+| Lessons | Topic | Coverage | Connection to the discussion |
 |---|---|---|---|
-| 1–16 | 基礎訓練、剪枝、蒸餾與部署流程 | 依相關講義合併：BERT／DistilBERT 情緒分類、模型訓練與評估、剪枝及 Spaces 部署 | 建立基準、模型狀態與評估證據的基本觀念；不將分類成果直接推廣為生成推理成果 |
-| 17 | January 2024 Update To Fine Tuning Methods | QLoRA 與較低資源需求的微調路線 | 區分「降低可訓練成本」與「提高任務能力」 |
-| 18 | ChromaDB 與 RAG 向量化 | 向量資料庫、embedding 與檢索 | 外部資訊如何進入回答流程；資料庫只是其中一個元件 |
-| 19 | ROPE Fine Tuning | 與位置表示、上下文延長相關的討論；具體方法未確認 | 不把可接受的輸入長度視為理解品質的保證 |
-| 20 | Self-Rewarding LLMs | 模型提供評分與偏好回饋，再用於訓練 | 訓練回饋的來源與獨立驗證 |
-| 21 | LoRA Tuning Tips and Tricks | rank、作用層及訓練設定 | 更新方式的選擇不能取代資料與任務設計 |
-| 22 | Auto Train | 自動化訓練工具；具體產品未確認 | 自動化減少操作，不會自動定義有效的實驗 |
-| 23 | RAFT | 課名對應的延伸研究為檢索情境訓練 | 說明檢索與微調可以組合；不將延伸研究視為已確認的影片引用 |
-| 24 | GPT Auto Trainer | 自動訓練流程 | 分清資料生成、設定搜尋與實際參數更新 |
-| 25 | 微調與訓練需要多少資料 | 資料量、品質與覆蓋範圍 | 評估增加樣本是否真的增加學習訊號 |
-| 26 | RAG Tuning vs Fine Tuning | 檢索與微調的比較 | 同一應用目標可以採用不同機制，但比較時必須說明條件 |
-| 27 | MoRA Fine Tuning | 高秩有效更新的參數高效率方法 | 在相近可訓練參數預算下，更新結構仍可能不同 |
-| 28 | GraphReader | 圖式文件組織與逐步證據探索 | 把一次檢索擴展為多步閱讀，同時引入前處理與呼叫成本 |
-| 29 | Universal Multimodal Embeddings | 跨模態表徵；指定模型未確認 | 能檢索相關影像或文字，不等於已完成內容理解與回答驗證 |
-| 30 | Synthetic vs Real Data | 合成資料與真實資料的使用 | 來源之外，還要檢查正確性、重複性與目標分布 |
-| 31 | Pruning and Knowledge Distillation | 壓縮與蒸餾的組合 | 各階段的品質與成本收益需要分別量測 |
-| 32 | Differential Transformers | 與差分注意力相關的架構研究 | 架構改動不是可直接套用到所有模型的微調參數 |
-| 33 | Fine Tuning Simplistically Explained | 微調概念回顧 | 收束模型參數更新與任務調適 |
-| 34 | Fine Tuning and RAG Tuning 的差異 | 檢索與微調回顧 | 接回知識學習、資訊取得與系統評估的區分 |
+| 1–16 | Training, pruning, distillation, and deployment | Grouped from the handouts: BERT/DistilBERT sentiment classification, training and evaluation, pruning, and deployment on Spaces | Establish baselines and track model states. Classification results do not directly establish generative reasoning ability. |
+| 17 | January 2024 Update To Fine Tuning Methods | QLoRA and lower-resource fine-tuning | Separate lower training cost from higher task capability. |
+| 18 | ChromaDB and vectorization for RAG | Vector databases, embeddings, and retrieval | Follow how external information reaches an answer. The database is one component. |
+| 19 | ROPE Fine Tuning | Positional representations and context extension; the specific method is unconfirmed | A longer accepted input does not establish better understanding. |
+| 20 | Self-Rewarding LLMs | Model-generated scores and preference feedback used for training | Examine the feedback source and validate results independently. |
+| 21 | LoRA Tuning Tips and Tricks | Rank, target layers, and training settings | An update method does not replace task and data design. |
+| 22 | Auto Train | Automated training tools; the specific product is unconfirmed | Automation reduces manual work, but the experiment still needs a valid design. |
+| 23 | RAFT | Retrieval-aware training, explored through the related paper | Retrieval and fine-tuning can work together. The paper is background reading, not a confirmed video citation. |
+| 24 | GPT Auto Trainer | Automated training workflows | Separate data generation, configuration search, and actual parameter updates. |
+| 25 | Data requirements for fine-tuning and training | Data volume, quality, and coverage | Check whether more examples add useful learning signals. |
+| 26 | RAG Tuning vs Fine Tuning | Comparing retrieval and fine-tuning | Different mechanisms can serve the same application, provided the comparison conditions are clear. |
+| 27 | MoRA Fine Tuning | A parameter-efficient method with higher-rank effective updates | The update structure can differ even at a similar trainable-parameter budget. |
+| 28 | GraphReader | Graph-based document organization and stepwise evidence exploration | Multi-step reading adds preprocessing and model-call costs. |
+| 29 | Universal Multimodal Embeddings | Cross-modal representations; the specific model is unconfirmed | Retrieving related text or images does not complete interpretation or answer validation. |
+| 30 | Synthetic vs Real Data | Using generated and real-world data | Check correctness, duplication, and the target distribution, not just the source. |
+| 31 | Pruning and Knowledge Distillation | Combining compression and distillation | Measure quality and cost after each stage. |
+| 32 | Differential Transformers | Architecture research involving differential attention | An architecture change is not a fine-tuning setting for every existing model. |
+| 33 | Fine Tuning Simplistically Explained | Fine-tuning recap | Review parameter updates and task adaptation. |
+| 34 | Differences Between Fine Tuning and RAG Tuning | Retrieval and fine-tuning recap | Return to the distinction between learning, information access, and system evaluation. |
 
-前半段的訓練與評估講義提供較連續的流程，後半段則擴展到不同層次的主題。這種廣度適合建立方法地圖，但也要求讀者辨識：BERT 的分類分數、QLoRA 的記憶體需求，以及 GraphReader 的問答結果，不是同一個量。
+The earlier handouts follow a fairly continuous training and evaluation workflow. Later lessons broaden the scope. That gives the course useful breadth, but a BERT classification score, QLoRA memory usage, and a GraphReader question-answering result measure different things.
 
-「2024–2026」在此表示課程與延伸研究的閱讀範圍，不代表全部課程內容都在 2024 年初定稿，也不表示所列方法都是這段期間才出現。
+The 2024–2026 range describes the course material and follow-up reading. It does not mean every lesson was finalized in early 2024, or that every method first appeared during these years.
 
-## 二、方法對照：先分清介入位置，再比較成果
+## 2. Methods: what changes and what needs to be measured
 
-### 2.1 不同名稱不一定代表互斥選項
+### 2.1 These are not mutually exclusive choices
 
-SFT、CPT、LoRA、蒸餾和 RAG，並不位於同一個分類層級。
+SFT, CPT, LoRA, distillation, and RAG describe different parts of a workflow.
 
-**SFT 與 CPT**主要描述訓練目的、資料安排及訓練階段；**LoRA／QLoRA**描述更新如何參數化，以及基礎權重如何儲存；**蒸餾**描述教師提供哪些學習訊號；**RAG**則描述推論時如何取得並使用外部證據。這些區別可由課程材料、Hugging Face PEFT 文件及後述 RAFT、CPT、蒸餾研究交叉理解。
+Supervised fine-tuning (SFT) and continued pretraining (CPT) mainly describe the training purpose, data arrangement, and stage. LoRA and QLoRA describe how updates are parameterized and, for QLoRA, how the base weights are stored. Distillation describes the teacher's learning signal. RAG describes how external evidence is retrieved and used at inference time. This distinction follows the course material, Hugging Face's PEFT documentation, and the RAFT, CPT, and distillation studies discussed below.
 
-例如，使用教師產生的答案，透過 LoRA 做 SFT，同時涉及蒸餾、監督式微調與參數高效率更新。以 LoRA 在領域語料上延續語言建模，也可以是參數高效率 CPT。若訓練輸入還含有檢索證據，則又加入了檢索情境的訓練設計。
+For example, training on teacher-generated answers with LoRA can be response distillation, SFT, and parameter-efficient adaptation at the same time. LoRA can also be used for continued training on domain text. Including retrieved evidence in the training inputs adds another design choice.
 
-因此，「LoRA 能不能解決問題」仍然少了資訊：採用什麼資料、優化什麼目標、允許改哪些參數，以及最後如何測試，才決定這個問題能否被回答。
+“Can LoRA solve this?” leaves too much unspecified. What is the training data? What is the objective? We also need to know which parameters can change and how the result will be tested.
 
-### 2.2 改善方法與驗收條件
+### 2.2 Method comparison
 
-下表是依課程內容、PyTorch／Hugging Face 官方文件及後述研究整理的機制對照，不是方法排名。它保留課程的廣度，並將 CPT 與推論時計算等延伸主題放入同一個工程視角。
+This table brings together the course topics, PyTorch and Hugging Face documentation, and the research discussed later. CPT and test-time compute are included as extensions to the course discussion. The rows describe mechanisms and evaluation requirements, not a ranking.
 
-| 方法／介入方式 | 主要改變的位置 | 持久參數是否改變 | 主要改善目標 | 需要另外驗證的限制 |
+| Method or intervention | What changes | Persistent parameter change | Main target | What still needs checking |
 |---|---|---|---|---|
-| 提示與直接提供上下文 | 當次輸入 | 通常否 | 更清楚的任務指示與資訊供應 | 提示敏感度、上下文完整性；讀過一次不代表永久保留 |
-| 一般固定模型的 RAG | 外部資料、檢索與上下文組裝 | 檢索本身不更新生成模型 | 資訊新鮮度、來源可追溯性、文件問答 | 證據覆蓋、版本與權限、生成答案是否受證據支持 |
-| SFT | 以示例更新輸出行為 | 是，可更新全參數或 adapter | 任務適應、格式、規律與部分知識學習 | 新情境泛化、未知資訊處理與原有能力保留 |
-| 全參數 CPT／領域調適預訓練 | 延續訓練以適應新語料分布 | 是，更新範圍較廣 | 領域用語、關聯與知識的學習 | 訓練投入、資料混合、知識可調用性與遺忘 |
-| LoRA | 權重增量的低秩表示 | 是，主要更新 adapter | 降低可訓練參數與相關狀態成本 | rank、作用層、資料及目標是否適合；不保證推論加速 |
-| QLoRA | 低位元基礎權重加上 adapter 訓練 | 是，主要更新 adapter | 進一步降低基礎權重的儲存需求 | 精度、序列長度與中間計算需求；不等於全部計算都低位元 |
-| MoRA | 不同於 LoRA 的有效更新結構 | 是 | 在參數預算內探索較高秩更新 | 任務適用性、知識學習與舊能力保留，不能預設全面勝出 |
-| 知識蒸餾 | 學生接收的教師訊號 | 是，更新學生 | 轉移目標任務的知識、行為或解題能力 | 教師正確性、訊號難度、學生可學性與改善歸因 |
-| 剪枝 | 連結、權重遮罩或網路結構 | 改變權重或結構，是否再訓練依流程而定 | 移除冗餘、減少特定部署成本 | 零值是否轉成真正的尺寸與運算收益，以及修改後品質 |
-| 量化 | 權重或其他數值的表示 | 數值表示改變，不一定經梯度更新 | 降低儲存、記憶體或相容硬體上的運算成本 | 核心支援、精度損失與端到端速度；本文作為壓縮補充 |
-| RAFT／檢索情境訓練 | 相關證據、干擾文件與回答目標的安排 | 是 | 提高模型利用檢索證據的能力 | 檢索缺失、干擾內容、未見文件與證據衝突 |
-| Self-Rewarding | 偏好回饋的生成與迭代訓練 | 訓練階段會改變 | 利用模型產生回饋以改善回答 | 評分偏差、回饋錯誤及獨立評估結果 |
-| GraphReader／圖式探索 | 文件組織與多步閱讀流程 | 不必因此更新生成模型 | 跨段落、多證據的資訊整合 | 建圖誤差、探索成本、延遲及是否優於簡單檢索 |
-| 多模態 embedding | 文字、影像等資料的表示空間 | 使用既有模型建索引時通常不更新它 | 跨模態搜尋與相似資訊對齊 | 細節是否保留；表徵相近不保證可回答問題 |
-| RoPE 相關長上下文方法 | 位置表示與可能的長文本訓練 | 依方法而定 | 擴展可處理的序列範圍 | 短文本退化、遠端證據利用及上下文成本 |
-| Differential Transformer | 注意力架構 | 需要相應架構與訓練權重 | 改變訊息選擇與混合方式 | 相近訓練預算下的收益，不是現成模型的通用開關 |
-| 推論時計算擴展 | 候選生成、搜尋、驗證與選擇 | 未另加訓練時通常否 | 提高固定模型下的任務成功率 | 額外計算是否有效、答案如何選出、停止條件與總成本 |
+| Prompting and direct context | The current input | Usually no | Clearer instructions and better information supply | Prompt sensitivity and context completeness; reading once does not imply permanent retention. |
+| RAG with a fixed generator | External data, retrieval, and context assembly | Retrieval itself does not update the generator | Fresh information, traceable sources, document QA | Evidence coverage, versions, permissions, and whether the evidence supports the answer. |
+| SFT | Output behavior learned from examples | Yes, through full-parameter or adapter updates | Task adaptation, formats, rules, and some knowledge | Generalization, handling unknown information, and retention of earlier capabilities. |
+| Full-parameter CPT / domain-adaptive pretraining | Continued training on a new data distribution | Yes, across a wider parameter set | Domain language, relationships, and knowledge | Training investment, data mixture, usable knowledge, and forgetting. |
+| LoRA | A low-rank representation of weight updates | Yes, mainly in adapters | Fewer trainable parameters and associated training states | Rank, target layers, data, and objective; inference speedup is not guaranteed. |
+| QLoRA | Low-bit base-weight storage plus adapter training | Yes, mainly in adapters | Further reduction in base-weight memory | Precision, sequence length, and intermediate computation; not all arithmetic becomes low-bit. |
+| MoRA | An effective update structure different from LoRA | Yes | Higher-rank updates within a parameter budget | Task suitability, knowledge learning, and retention; no assumed win across all tasks. |
+| Knowledge distillation | The teacher signal received by the student | Yes, in the student | Transfer of task knowledge, behavior, or problem-solving ability | Teacher correctness, signal difficulty, student learnability, and attribution of gains. |
+| Pruning | Connections, weight masks, or network structure | Weights or structure change; retraining depends on the workflow | Remove redundancy and reduce particular deployment costs | Whether zeros translate into smaller structures or less work, and quality after the change. |
+| Quantization | Numerical representations of weights or other values | Representation changes, not necessarily through gradients | Lower storage, memory, or compute cost on compatible hardware | Kernel support, precision loss, and end-to-end speed; included here as compression background. |
+| RAFT / retrieval-aware training | Relevant evidence, distractor documents, and answer targets | Yes | Better use of retrieved evidence | Missing evidence, distractors, unseen documents, and conflicting sources. |
+| Self-Rewarding | Preference generation and iterative training | Yes during training | Improve answers using model-generated feedback | Scoring bias, incorrect feedback, and independent evaluation. |
+| GraphReader / graph exploration | Document organization and multi-step reading | Does not inherently require generator updates | Combine information across passages and evidence sources | Graph errors, exploration cost, latency, and comparison with simpler retrieval. |
+| Multimodal embeddings | The representation space for text, images, and other data | Usually no when indexing with an existing model | Cross-modal search and alignment | Preserved detail; similar representations do not guarantee sufficient evidence for an answer. |
+| RoPE-related context extension | Positional representations and possibly long-text training | Depends on the method | Handle a wider range of sequence lengths | Short-context regressions, use of distant evidence, and context-processing cost. |
+| Differential Transformer | Attention architecture | Requires corresponding architecture and trained weights | Change information selection and mixing | Gains under comparable training budgets; not a universal switch for existing models. |
+| Test-time compute scaling | Candidate generation, search, verification, and selection | Usually no without additional training | Higher task success with a fixed model | Useful additional work, answer selection, stopping conditions, and total cost. |
 
-需要特別分開的是**權重更新、學習成果與系統品質**。更新 adapter 可以形成持久學習，但不保證泛化；不更新權重的系統也可能回答得更可靠，卻不能因此宣稱模型完成了長期知識更新。後面的研究探討，正是在這些差別上建立證據。
+An adapter update is a persistent change to learned parameters. Whether it generalizes is another question. A fixed-weight system can also become more reliable through better evidence or a better inference workflow. The next sections examine how to tell these gains apart.
 
-## 三、教材檢查：區分版本問題與實驗證據問題
+## 3. Checking the course examples
 
-課程的價值不只在方法介紹，也在於它提供了可以檢查的實驗流程。以下集中討論評估講義中的幾個環節，避免將同樣的警告散落在每個技術章節。
+The handouts give us more than method descriptions: they show evaluation steps that can be inspected. Several details deserve attention before reusing the examples.
 
-### 3.1 模型大小需要對應實際改變的結構
+### 3.1 Parameter count must match the actual structure
 
-〈Lecture 10：剪枝後模型評估〉使用 `sum(p.numel() for p in model.parameters())` 計算參數數量，並展示剪枝後減少的示意數字。但 `numel()` 計算的是張量元素，不是非零權重。依 PyTorch 官方剪枝教學，一般遮罩操作可寫成 `W′ = M ⊙ W`；權重變成零，矩陣形狀不會自動縮小。
+The handout *Lecture 10: How to evaluate our LLM model after pruning* uses `sum(p.numel() for p in model.parameters())` and shows an example with a lower parameter count after pruning. But `numel()` counts tensor elements, not nonzero weights. The standard masking operation described in PyTorch's pruning tutorial can be written as `W′ = M ⊙ W`. Setting weights to zero does not shrink the matrix dimensions.
 
-如果其他步驟確實重建了較小的網路，參數減少可能成立；只看該評估片段，則缺少這項結構變更的證據。模型尺寸、非零權重數與推論時間應分別報告，不能由其中一項直接推出其他兩項。
+A lower parameter count could be valid if another step rebuilt the network with smaller tensors. That step is missing from the evaluation excerpt. Report model size, nonzero-weight count, and inference time separately instead of treating them as interchangeable.
 
-### 3.2 修改後的模型需要重新評估
+### 3.2 Evaluate the model after changing it
 
-〈Lecture 15：學生模型評估〉的展示順序，是先呼叫 `trainer.evaluate()`，再執行學生剪枝；後續說明卻把先前分數描述成訓練且剪枝後的結果。
+The student-evaluation handout, *Lecture 15*, calls `trainer.evaluate()` before pruning the student. Its later explanation describes that score as the result of the trained and pruned model.
 
-問題不在套件是否過時，而在分數對應的受測狀態。修改前的品質與修改後的大小，不能拼成同一個模型狀態的成果。教師、訓練後學生與剪枝後學生需要分別保存、評估和比較。
+The library version is beside the point here. The score belongs to the student before pruning. Pairing that accuracy with the size after pruning combines measurements from two different model states. Save and evaluate the teacher, trained student, and pruned student separately.
 
-### 3.3 指標函式與標籤是評估成立的前提
+### 3.3 Evaluation needs a metric function and valid labels
 
-兩份講義展示的 `Trainer` 設定未列出 `compute_metrics`，卻宣稱評估會得到 accuracy 等任務指標。Hugging Face 的 Trainer 文件將這類指標交由使用者提供計算函式；一般執行統計不等於已定義正確的分類評分方式。
+Neither displayed `Trainer` configuration includes `compute_metrics`, although the accompanying text says evaluation returns task metrics such as accuracy. Hugging Face's Trainer documentation expects the caller to supply the function for those metrics. Runtime statistics do not define a classification scoring rule.
 
-展示程式也使用 SST-2 的公開 `test` 切分。Stanford NLP 的資料卡指出，該切分的真實標籤不公開，以 `-1` 表示，因此不能直接據此計算有意義的本地準確率。完整 Notebook 若另有設定或標籤來源，需要一併說明；否則應採用具有有效標籤的保留資料或正式評測流程。
+The code also uses the public SST-2 `test` split. Stanford NLP's dataset card states that its true labels are hidden and represented by `-1`. Those values cannot provide meaningful local classification accuracy. Any additional metric configuration or separate label source in a full notebook would need to be included in the explanation. Otherwise, use held-out data with valid labels or the official evaluation process.
 
-這些觀察限於講義展示的證據，不代表所有外連程式都已被執行或判定有相同問題。
+These observations concern the code shown in the handouts. They are not a claim that every linked notebook has been run or has the same problems.
 
-### 3.4 舊介面、研究方法與使用權不能混在一起判斷
+### 3.4 Version changes, research limits, and usage rights
 
-套件介面更新屬於實作維護；研究效果受任務與預算限制，屬於外推範圍；教師輸出的訓練用途，則屬於授權與服務條件。這三者都值得在重用教材時檢查，但不能籠統歸為「2024 的方法過期了」。
+An outdated API is a maintenance issue. A result that only holds under a particular task and budget has an experimental limit. The right to train on a teacher's output is a licensing and service-terms issue. Calling all three “outdated 2024 methods” would hide the actual work needed.
 
-同樣地，MoRA、GraphReader 與 Self-Rewarding 分別處理更新結構、證據探索與回饋生成。它們是否適合某個應用，應依該應用的失敗型態判斷，而不是依名稱新舊。採用第三方教師生成訓練資料前，也應核對模型授權、服務條件與資料權利，不能由 API 可呼叫推論任意訓練用途都被允許。
+MoRA, GraphReader, and Self-Rewarding address update structure, evidence exploration, and feedback generation, respectively. Whether they belong in an application depends on its failure modes. A newer name is not enough reason to add another component. Before generating training data with a third-party teacher, also check the model license, service terms, and data rights. API access alone does not authorize every training use.
 
-從這些教材環節往下延伸，問題便不再只是「使用哪個方法」，而是「何種證據足以支持所宣稱的改善」。
+The evaluation problems in the handouts lead directly into the research discussion: a method name and an example output still need evidence behind them.
 
-## 四、知識學習：從接觸資料到跨情境使用
+## 4. Knowledge: learning facts and using them in new contexts
 
-### 4.1 檢索與微調可以比較，但比較目標必須一致
+### 4.1 Comparing retrieval and fine-tuning fairly
 
-對固定權重的生成模型，RAG 可簡化為：
+For a fixed-weight generator, RAG can be simplified to:
 
 ```text
-回答 = Mθ（問題，取回的證據）
+answer = Mθ(question, retrieved_evidence)
 ```
 
-文件被加入外部資料來源，再於回答時送進上下文。這個步驟沒有把模型的持久參數 `θ` 更新為另一套權重；模型仍可以在當次上下文中做比較與推理，但不能因為成功回答一次，就推定它已永久保留這些資訊。
+Documents are stored externally and supplied as context when the model answers. Retrieval does not replace the persistent parameters `θ` with a new set of weights. The model can still compare information and reason within that context. A successful answer does not establish that it will retain the information without the documents later.
 
-微調則改變模型參數。從應用角度看，兩種流程都可以用來改善同一份文件上的問答，因此比較有意義；從學習角度看，一個使用當次證據，另一個嘗試利用訓練後的記憶，則是在測不同的資訊取得方式。
+Fine-tuning changes parameters. Both approaches can improve QA over the same documents, so an application-level comparison is useful. But one supplies evidence at inference time while the other tries to use information learned during training. They give us different evidence about learning.
 
-Ovadia 等人在 **[《Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs》](https://aclanthology.org/2024.emnlp-main.15/)（EMNLP 2024）**中，比較 RAG 與非監督式微調。在所測的知識密集任務中，RAG 的表現優於該研究的微調流程；將同一事實以多種表達形式納入訓練，可以改善微調效果。值得注意的是，該文的非監督式微調是延續語言建模訓練，與 CPT 有重疊，並非一般指令問答 SFT 的代名詞。
+Ovadia et al. compare RAG with unsupervised fine-tuning in [*Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs*](https://aclanthology.org/2024.emnlp-main.15/) (EMNLP 2024). RAG performs better on the knowledge-intensive tasks they test. Presenting the same facts in several forms improves the fine-tuning results. Importantly, their unsupervised fine-tuning continues language-model training and overlaps with CPT; it is not simply another name for instruction-response SFT.
 
-這項研究適合回答「在這些條件下，哪種流程更能完成問答」，不能直接回答「所有模型都無法透過訓練學習新知識」。它也不能被接成「SFT 無效，所以改成 CPT 就能解決」的推論，因為被比較的訓練流程本來就可能屬於持續預訓練的範圍。
+I would be careful with the conclusion here. The paper compares particular workflows; it does not rule out learning new facts through training. “SFT failed, so CPT will fix it” also misses the setup: the training being compared already overlaps with continued pretraining.
 
-對工程評估而言，這裡可以拆成兩種不同的驗收：
+For evaluation, there are two separate goals. An **application test** asks whether the system answers correctly with the permitted data, tools, and budget. Retrieval, citations, document updates, and training can all contribute. A **learning test** asks what persistent change a particular training run produced. Here, inference-time information needs to be controlled so new evidence does not cover up a gap in what the model learned.
 
-**應用驗收**關心的是在允許的資料、工具與成本下，系統是否能回答正確。文件更新、檢索、引用與訓練都可以是方案的一部分。
+Both tests are useful. An open-book system winning a QA comparison has not demonstrated closed-book learning. A lower closed-book score does not make retrieval the better choice under every latency, offline-use, or data-access constraint either.
 
-**學習驗收**則關心某次訓練帶來了什麼持久變化。此時應控制推論時提供的資訊，否則新增的外部證據可能掩蓋模型本身並未學會的部分。
+### 4.2 Updating weights does not guarantee usable knowledge
 
-兩種驗收都合理，但報告必須說明自己正在主張哪一種改善。開書問答的系統勝出，不代表它完成了閉書知識學習；閉書模型的分數較低，也不代表檢索方案在每種延遲、離線或資料存取限制下都較合適。
-
-### 4.2 參數更新不是一個可靠的知識寫入介面
-
-生成式 SFT 常透過下列目標，提高訓練答案的條件機率：
+Generative SFT commonly increases the conditional probability of target answers using an objective such as:
 
 ```text
 L_SFT = −Σ log pθ(y_t | x, y_<t)
 ```
 
-其中 `x` 是輸入，`y_t` 是答案中的目標 token。這個目標不會直接替「事實」「文風」與「推導方法」標上不同的學習類別。示例包含新事實時，模型可能取得知識；示例主要改變格式時，模型也可能主要適應格式。結果取決於資料與訓練，而不是只由 SFT 這個名稱決定。
+Here, `x` is the input and `y_t` is a target answer token. The objective does not separately label facts, writing style, and solution methods. Examples containing new facts can teach knowledge; examples dominated by formatting changes may mostly teach the format. The data and training determine the outcome.
 
-Gekhman 等人的 **[《Does Fine-Tuning LLMs on New Knowledge Encourage Hallucinations?》](https://aclanthology.org/2024.emnlp-main.444/)（EMNLP 2024）**在受控的閉書問答中，改變微調資料所含新知識的比例。研究觀察到，模型原先不知道的事實學得較慢；在其設定中，當這些新事實逐漸被學會時，也伴隨更高的幻覺傾向。
+In [*Does Fine-Tuning LLMs on New Knowledge Encourage Hallucinations?*](https://aclanthology.org/2024.emnlp-main.444/) (EMNLP 2024), Gekhman et al. vary the amount of new knowledge in fine-tuning data for controlled closed-book QA. Previously unknown facts are learned more slowly. In their setup, learning those facts is also associated with a higher tendency to hallucinate.
 
-這個結果指出了一項風險：把新答案教進模型，與維持模型對其他問題的可靠回答，可能不是同步改善。它沒有證明微調一定有害，也沒有建立「SFT 只能教行為」的機制定律。
+Teaching new answers and preserving reliable answers elsewhere may therefore pull in different directions. This does not make fine-tuning inherently harmful, or establish a rule that SFT can only teach behavior.
 
-由此延伸的評估要求，是把目標知識與非目標能力分開測量。例如某次訓練希望補進一組產品規則，除了新規則的正確率，還應檢查原有規則是否被覆蓋、相近產品是否被套用錯誤答案，以及沒有足夠資訊時是否更容易作出肯定回覆。只驗證新增資料中的問題，無法觀察這些代價。
+A practical evaluation should measure the target knowledge and other capabilities separately. For a training run that adds product rules, test the new rules, but also check whether old rules were overwritten, whether the model applies an answer to the wrong product, and whether it becomes more confident when information is missing. Questions drawn only from the new material would miss those costs.
 
-此外，訓練 loss 下降只說明受訓目標更容易被預測，不直接表示模型更能區分有效答案與不適用答案。把所有訓練樣本的改善平均成一個數值，也可能隱藏少數重要能力的退化。
+A falling training loss tells us that the targets have become easier to predict. It does not directly tell us whether the model handles invalid or inapplicable answers better. An average improvement can also conceal a large regression in a small but important category.
 
-### 4.3 相同事實，用不同任務呈現，可能學出不同結果
+### 4.3 The same facts can produce different learning outcomes
 
-新知識訓練還有一個容易低估的變數：模型究竟被要求對資訊做什麼。
+The task we ask the model to perform on new information is easy to underestimate.
 
-Jan 等人的 **[《Data Doping or True Intelligence? Evaluating the Transferability of Injected Knowledge in LLMs》](https://aclanthology.org/2025.findings-emnlp.589/)（Findings of EMNLP 2025）**比較相同事實透過不同任務進入微調的效果。研究摘要報告，問答與填空類任務的知識保留約為 48%，高於翻譯的 17% 與文字轉 JSON 的 20%；但跨到較廣情境使用時，受測模型仍明顯退步。這些比例屬於該研究的資料、模型與評分設定，不是通用成功率。
+Jan et al. study this in [*Data Doping or True Intelligence? Evaluating the Transferability of Injected Knowledge in LLMs*](https://aclanthology.org/2025.findings-emnlp.589/) (Findings of EMNLP 2025). The abstract reports roughly 48% knowledge retention for QA and cloze tasks, compared with 17% for translation and 20% for text-to-JSON. Performance still drops when the tested models have to use the knowledge in broader contexts. Those percentages belong to the paper's data, models, and scoring setup; they are not general success rates.
 
-這篇研究提供的重點，不是 JSON 格式不好，而是**完成資料轉換與能在其他任務中調用資料，是不同的訓練成果**。翻譯或轉換格式本身可能正是應用目標；只是不能由這項工作完成得好，進一步推論模型已學會其中全部事實。
+Translation or JSON conversion may be exactly what an application needs. The mistake would be to take success at that job as proof that the model can also use the same facts in a different task.
 
-以下用一個假設的設備文件說明這個差別，並非論文實驗或實測案例：
+A hypothetical device rule makes the distinction easier to see. This example was developed for the discussion; it is not from the paper or a measured case:
 
-> 某設備只有進入維護模式後，才能更新韌體。
+> A device must enter maintenance mode before its firmware can be updated.
 
-把這句話轉成結構化欄位，可以測試資訊擷取；問「更新前必須進入哪種模式」，可以測試直接調用；改問「目前仍在正常運作模式，是否能立即更新」，則要求模型將條件用於判斷。如果再給一個例外條件，就還需要區分一般規則與例外適用範圍。
+Turning that sentence into structured fields tests extraction. Asking which mode is required before an update tests direct recall. Asking whether an update can proceed while the device is still in normal operating mode requires applying the condition. Adding an exception tests whether the model can distinguish the general rule from the exception's scope.
 
-這些題目可以涉及同一個事實，卻不要求相同的處理方式。教材若只保留第一種形式，評估卻期待最後一種能力，中間就存在尚未驗證的泛化要求。
+The fact is the same, but the required work changes. Training only on extraction and then expecting conditional judgment leaves a generalization step untested.
 
-從訓練設計看，值得增加的不是單純更多句子，而是能暴露不同必要關係的任務。例如正向與反向查詢、必要條件與充分條件、適用與不適用案例，以及多個條件的組合。這是本文根據研究提出的教材設計方向，不是宣稱加入這些形式就一定成功。
+For data design, I would cover the relationships the model needs to use: forward and reverse queries, necessary versus sufficient conditions, applicable and inapplicable cases, and combinations of conditions. This is a direction to test when building the curriculum, rather than a guarantee that these examples will produce the desired learning.
 
-### 4.4 把「學會」拆成可觀察的測試
+### 4.4 Give “learned” a testable meaning
 
-上述研究分別涉及資訊取得、事實學習風險與知識轉移。若要進一步比較方法，可以把驗收拆成四個層次，而不是用一個分數代表理解。
+The studies above cover information access, the risks of learning new facts, and transfer across tasks. A useful evaluation can check four things separately.
 
-**直接調用**：不附上來源文件，模型是否能回答訓練涉及的事實。這能提供參數知識可用的證據，但仍可能高度依賴熟悉的問法。
+Start with direct recall: remove the source document and ask about the facts involved in training. Success shows that some knowledge is available through the model, although the answer may still depend on familiar wording.
 
-**表達遷移**：保持事實與任務不變，只改變敘述、欄位順序或問句。這用來檢查答案是否過度依賴固定表達，不能單憑失敗就斷言模型完全沒有學到知識。
+Then change the presentation while keeping the fact and task fixed. Reword the question or reorder the fields. This checks dependence on a particular expression. Failure here narrows the claim we can make; it does not, by itself, prove that nothing was learned.
 
-**條件組合**：把已學規則與新的條件組合，檢查模型是否能正確選擇適用範圍。這比重現一個答案多了一項要求，也最容易揭露局部記憶與可用規律之間的差距。
+Next, combine a learned rule with new conditions. The model has to select the correct scope of application, rather than repeat a known answer. This is where a locally memorized answer may stop being useful.
 
-**保留與邊界**：再訓練其他內容後，舊能力是否仍存在；對條件不足或不適用的問題，是否能避免套用熟悉答案。這部分處理的是穩定性，而不只是新增知識的分數。
+Finally, test retention and boundaries. After training on other material, check whether earlier capabilities remain. Also check incomplete and inapplicable cases, where repeating a familiar answer would be a mistake.
 
-資料切分也應對應這些目的。要測「訓練中出現的事實能否被新問法使用」，訓練與測試共享該事實是設計的一部分，但不應共享完整問答模板。要測「能否閱讀從未見過的文件」，則需要保留新的來源文件。兩種測試不能沿用同一套切分後，卻宣稱回答了兩個問題。
+Data splits should match the purpose. To test whether a learned fact survives a new question form, sharing that fact between training and testing is intentional; sharing the complete question-answer template is not. To test reading of unseen documents, hold out new source documents. One split cannot automatically support both claims.
 
-這些是可操作的評估層次，仍不構成對人類式理解的直接證明。它們的作用，是讓「模型學會了」至少對應到明確的行為範圍。
+These tests still do not prove human-like understanding. They give “the model learned it” a specific, observable scope.
 
-### 4.5 CPT 的重點是持續適應，而不是保證內化
+### 4.5 CPT still needs task-level validation
 
-持續預訓練（continued／continual pretraining，以下簡稱 CPT）通常從既有模型出發，延續語言建模等訓練，以適應新語料或領域。相較於只針對特定輸出習慣的示例，它可以把訓練範圍擴展到領域用語、概念關聯與更廣的資料分布。
+Continued or continual pretraining, abbreviated here as CPT, starts from an existing model and continues training, often with a language-modeling objective, on new text or domains. Compared with examples aimed at a particular response habit, it can expose the model to a broader range of domain terminology, relationships, and text distributions.
 
-但 CPT 與 SFT 的名稱並不能取代實際訓練定義。Chen 等人的 **[《Towards Effective and Efficient Continual Pre-training of Large Language Models》](https://aclanthology.org/2025.acl-long.289/)（ACL 2025）**以 Llama 3 8B 探索中文與科學推理能力，使用資料混合、課程安排、表現追蹤及混合比例調整，並包含合成的科學問答資料。它並不是只把未加工文章大量輸入模型的實驗。
+The actual training setup matters more than the label. Chen et al., in [*Towards Effective and Efficient Continual Pre-training of Large Language Models*](https://aclanthology.org/2025.acl-long.289/) (ACL 2025), use Llama 3 8B to study Chinese-language and scientific-reasoning capabilities. Their approach includes data mixing, curriculum design, performance tracking, and mixture adjustments. It also includes synthetic scientific QA. This is more involved than feeding a pile of unprocessed articles into a model.
 
-這個研究把焦點放在新增能力與原有能力的平衡。由此延伸，持續適應的設計至少需要同時考慮三項：新領域提供哪些學習訊號、原有分布以何種方式保留，以及何時調整或停止訓練。
+The study focuses on balancing new capabilities with existing ones. For a continued-adaptation design, that means considering the learning signal from the new domain, how the original distribution is retained, and when to adjust or stop training.
 
-對資料的要求也比「收集足夠容量的文件」更具體。大量內容可能重複、版本互相矛盾，或重要規則只出現一次。以總位元組數或 token 數估計訓練規模，有助於資源規劃，卻不能衡量知識覆蓋是否足夠。
+A large corpus can still have poor coverage. Documents may repeat each other, contradict earlier versions, or mention an important rule only once. Bytes and token counts help estimate the training job. They do not tell us whether the relevant knowledge is well represented.
 
-同時，低語言建模損失可能表示模型熟悉了領域文字分布，卻未必表示它能回答所需的專業問題。若目標是文件中的條件判讀，驗證就應直接包含條件判讀；若目標是程式任務，則需要對應的功能與正確性評估，而不能只看文字延續得是否自然。
+Likewise, a lower language-modeling loss may show that the model is more familiar with the domain's text without showing that it can answer the intended questions. Test conditional judgment directly when that is the goal. For code tasks, use functional and correctness checks rather than judging only how natural the continuation looks.
 
-因此，CPT 是值得考慮的領域調適途徑，但不是知識內化的保證。SFT 也不應被排除在知識學習之外。比較兩者時，應回到資料、損失、更新範圍與任務結果，而不是把「學行為」與「學知識」畫成一道不可跨越的界線。
+CPT deserves consideration for domain adaptation, but it does not guarantee that the required knowledge will become usable. SFT can also teach knowledge. The comparison needs the actual data, loss, update scope, and task results, rather than a hard boundary between “learning behavior” and “learning facts.”
 
-### 4.6 參數高效率 CPT 降低部分門檻，仍然需要成本與能力評估
+### 4.6 Parameter-efficient CPT still has a training bill
 
-依 Hugging Face PEFT 對 LoRA 的說明，其有效更新可表示為：
+Hugging Face's PEFT documentation describes a LoRA update in the form:
 
 ```text
 W′ = W + sBA
 ```
 
-其中基礎權重 `W` 可以凍結，`A`、`B` 是可訓練矩陣，`s` 是縮放係數。保存並載入這些參數後，模型的計算會持久改變。因此 adapter 是學習參數，不是推論時重新查閱的文件。
+The base weights `W` can stay frozen. `A` and `B` are trainable matrices, and `s` is a scaling factor. Saving and loading those parameters changes the model's computation persistently. An adapter is learned parameters, not a document retrieved again at inference time.
 
-這種設計能減少可訓練參數及其相關狀態，但基礎模型的前向計算、中間結果與反向傳播的相關需求仍然存在。總成本還受序列長度、總訓練 token、精度與執行方式影響。只說「能放進單張 GPU」不足以描述完整訓練門檻，更不能推論它與全參數更新具有相同效果。
+Reducing trainable parameters saves associated training states. The base model's forward computation, intermediate results, and relevant backpropagation work remain. Sequence length, total training tokens, precision, and implementation still affect the cost. “Fits on one GPU” says something about memory feasibility, but very little about the full training job or whether its result matches full-parameter training.
 
-Kim、Kang 與 Moon 在 **[《DoMIX: An Efficient Framework for Exploiting Domain Knowledge in Fine-Tuning》](https://aclanthology.org/2025.acl-long.710/)（ACL 2025）**中，利用 LoRA 模組處理領域調適預訓練，研究計算成本、領域加入順序及不同下游任務的調適。這提供了另一個方向：領域知識的利用可以透過模組化訓練與組合設計，不必全都壓在一次順序式全參數更新上。
+Kim, Kang, and Moon use LoRA modules for domain-adaptive pretraining in [*DoMIX: An Efficient Framework for Exploiting Domain Knowledge in Fine-Tuning*](https://aclanthology.org/2025.acl-long.710/) (ACL 2025). They study compute cost, domain order, and adaptation across downstream tasks. Their approach explores modular training and combinations of domain knowledge instead of placing every update into one sequential full-parameter training process.
 
-不過，低秩更新限制的是矩陣增量的形式，不是已知的「最多能記住多少事實」公式。若模型表現不佳，單純提高 rank 不能代替檢查教材、作用層與訓練量。對全參數 CPT 與參數高效率 CPT 的比較，除了新任務分數，也應納入舊能力、訓練時間和可重現性。
+Low rank constrains the form of the matrix update. It does not give us a formula for the maximum number of facts the model can remember. Raising the rank is no substitute for checking the data, target layers, and amount of training. A comparison with full-parameter CPT should include retained capabilities, training time, and reproducibility alongside the new-task score.
 
-小型驗證、大量領域語料訓練，以及需要長期維護的模型，因而是不同資源規模的工作。可行性應用具體配置回答，而不是把 CPT 一概描述為個人不可能，或把 adapter 訓練一概描述為低成本且容易成功。
+A small feasibility test, a large domain-training run, and a model that needs ongoing maintenance are different projects. The resource question needs an actual configuration. It is too broad to call CPT impossible for an individual, just as it is too broad to call every adapter-based run cheap or easy.
 
-### 4.7 檢索情境訓練把兩種能力接在一起
+### 4.7 Training a model to use retrieved evidence
 
-**[《RAFT: Adapting Language Model to Domain Specific RAG》](https://arxiv.org/abs/2403.10131)（2024）**把問題、相關證據與干擾文件放進訓練情境，讓模型學習使用合適的內容形成回答。這是課程中「RAG 與微調」討論的重要延伸：可以訓練的是閱讀與利用證據的行為，不必要求模型把外部文件全部背入參數。
+[*RAFT: Adapting Language Model to Domain Specific RAG*](https://arxiv.org/abs/2403.10131) (2024) brings questions, relevant evidence, and distractor documents into training. The model learns to select and use suitable evidence in its answer. This extends the course's RAG-versus-fine-tuning discussion: reading retrieved material is itself a trainable behavior. The model does not have to memorize every external document for training to help.
 
-例如，系統已取回正確的規格文件，答案卻引用了另一個版本，問題可能不在資料缺失，而在證據選擇或條件處理。反過來，正確證據根本沒有進入候選結果時，只訓練生成模型也未必能修補檢索缺口。
+For example, a system may retrieve the right specification but answer using a different version. That points toward evidence selection or condition handling. If the right document never reaches the candidate set, training only the generator may leave the retrieval failure untouched.
 
-從工程歸因看，適合分開比較相同檢索結果下的原模型與調適模型，或固定生成模型比較檢索流程。若檢索器、上下文與模型同時更換，整套系統改善仍然有價值，但無法直接判斷是哪個步驟解決了問題。
+To isolate the gain, compare the original and adapted models with the same retrieved evidence, or hold the generator fixed while changing retrieval. Replacing the retriever, context assembly, and model together can improve the system, but it will not tell us which change fixed the problem.
 
-這個區分讓知識學習的討論落到實際介入位置：有時需要增加模型可用的知識，有時需要改善它取得的證據，有時則需要訓練它更準確地使用現成資訊。
+The appropriate intervention depends on the failure: missing model knowledge, missing evidence, or poor use of evidence already available.
 
-## 五、能力轉移：教師品質與學生可學性
+## 5. Distillation: teacher quality and student learnability
 
-### 5.1 蒸餾首先是監督訊號的設計
+### 5.1 The student learns from a specific signal
 
-蒸餾經常被描述為「讓小模型學大模型」，但真正進入訓練流程的不是一份抽象能力，而是某種可觀察的訊號：答案、機率分布、表示、示範步驟，或評分與偏好。
+“Let a small model learn from a large one” is a useful starting description of distillation. The training loop, though, receives something concrete: answers, probability distributions, representations, worked examples, scores, or preferences.
 
-若用教師產生的文字當作目標，學生是在學習這些文字的條件生成；若比對教師機率分布，訓練目標則不同。兩者都可以改善學生，但不能把「最後答案接近」直接視為「內部推理過程已被複製」。外顯的解題說明也不等於能觀察教師完整的內部計算。
+Training on teacher-generated text teaches the student to generate those targets conditionally. Matching the teacher's probability distribution uses a different objective. Either can improve a student. Similar final answers do not establish that the teacher's internal reasoning has been copied, and a written explanation does not expose all of the teacher's internal computation.
 
-這項區分在課程的 BERT／DistilBERT 案例與生成式推理之間尤其重要。分類模型通常共享明確的標籤空間；生成模型則涉及不同長度的答案、tokenization、解題策略與錯誤傳遞。把分類蒸餾的成功直接推廣到複雜推理，會省略這些條件差異。
+The difference matters when moving from the course's BERT/DistilBERT examples to generative reasoning. Classification models usually have an explicit label space. Generative models also involve answer length, tokenization, solution strategies, and error propagation. A successful classification experiment does not settle those additional problems.
 
-因此，教師的選擇不能只看通用排行榜。更直接的要求是，它在目標任務上是否正確、輸出能否被驗證，以及所提供的訊號是否適合學生學習。課程中的教師模型訓練與學生評估，正是這個更廣問題的起點。
+A general leaderboard is not enough to choose the teacher. Check its answers on the target task and whether the student can learn from the output it provides. The course's teacher-training and student-evaluation steps are an entry point to that larger problem.
 
-### 5.2 更強教師與更長推理，不一定產生更好的學生
+### 5.2 A stronger teacher can be harder to learn from
 
-Li 等人在 **[《Small Models Struggle to Learn from Strong Reasoners》](https://aclanthology.org/2025.findings-acl.1301/)（Findings of ACL 2025）**中，研究小模型從強推理教師學習的效果。受測的 3B 級學生不一定從更長的推理文字或更大的教師取得最好結果；研究提出的 Mix Distillation 結合不同長度推理或不同教師，改善了部分設定下的學習表現。
+Li et al. examine this in [*Small Models Struggle to Learn from Strong Reasoners*](https://aclanthology.org/2025.findings-acl.1301/) (Findings of ACL 2025). The tested 3B-class students do not consistently get their best results from longer reasoning traces or larger teachers. The paper's Mix Distillation combines reasoning lengths or teachers and improves learning in some settings.
 
-這篇研究把可學性（learnability）放到教師品質之外。教師能寫出正確且複雜的解法，不代表學生在既定資料量與訓練預算下，能穩定吸收同一組解法。這是實驗觀察，不是所有小模型都存在相同固定能力上限的證明。
+A correct teacher answer can still be difficult teaching material. The student may not reliably absorb a complicated solution within the available data and training budget. The paper measures that kind of learnability gap. It does not establish one fixed capability ceiling for all small models.
 
-對蒸餾資料設計而言，可學性帶來一個具體取捨：完整保留教師的長回答，可能保留必要的條件，也可能增加大量與目標能力無關的文字；過度簡化，則可能只留下答案，移除了學生需要學會的判斷依據。
+Keeping a long teacher response may preserve important conditions, but it can also add text unrelated to the target skill. Cutting it too aggressively may leave only the answer and remove the basis for the decision.
 
-因此，比起統一要求「全部寫長」或「全部寫短」，更值得檢查的是每個步驟承擔的功能。它是否引入必要條件？是否排除一個容易混淆的替代答案？是否只是重新敘述題目？這些是本文提出的教材審查問題，不是只根據文字長度替樣本品質打分。
+For curriculum review, examine what each step does. A step that introduces a necessary condition or rules out a plausible alternative has a clear role. Repeating the question adds length without necessarily adding instruction. These are suggested review criteria, not a way to score training quality from response length alone.
 
-### 5.3 示範資料需要包含判斷邊界
+### 5.3 Examples need to show where a rule applies
 
-沿用前面的假設設備規則，只教「進入維護模式後更新韌體」，學生可能在所有相關問題上重複同一句話。要檢查它學到的是條件判斷，教材與測試就需要包含正常模式、維護模式、條件未提供，以及規則另有限制的情況。
+The firmware example from Section 4.3 is useful here. If every demonstration says “enter maintenance mode, then update,” a student may repeat that advice for every related question. To test conditional judgment, include normal mode, maintenance mode, an unspecified mode, and cases with additional restrictions.
 
-同樣地，對需要多步推理的任務，單一成功路徑不一定足以教會何時採用它。可以將容易混淆的案例放在一起：表面敘述接近，但必要條件不同；輸入資料相同，但問題要求不同；已知條件足夠作出部分判斷，卻不足以給出完整結論。
+For multi-step tasks, one successful path may not teach when to use it. Compare cases with similar wording but different conditions. Keep the input fixed and change the requested output. Include cases that support a partial answer but not a complete conclusion.
 
-這種安排的目的，是讓評估能區分「遇到關鍵字就產生常見答案」與「依條件選擇處理方式」。它不要求取得教師的私有內部推理，而是保留可核對的答案、依據、適用條件與必要步驟。
+These comparisons help distinguish a familiar answer triggered by a keyword from a decision based on the available conditions. They need checkable answers, evidence, applicability conditions, and necessary steps; they do not require access to a teacher's private internal reasoning.
 
-資料來源仍需分開管理。教師生成、人工標註與經程式驗證的答案，可以共同組成訓練資料；但應知道哪些內容曾被修正，哪些只是被模型自評為正確。教師自信與答案可驗證是兩個不同層次。
+Keep the source of supervision traceable as well. Teacher-generated, human-labeled, and programmatically verified answers may all be useful. Record which answers were corrected and which were only judged correct by a model. Teacher confidence is not an independent correctness check.
 
-### 5.4 學生進步，不等於所有收益都來自教師
+### 5.4 Work out which change improved the student
 
-蒸餾實驗常同時改變教師、資料品質、訓練量與題型覆蓋。如果最後學生分數上升，能支持的是整套流程改善了受測結果；若沒有分別建立對照，就不能把提升全部歸因於教師的知識轉移。
+Distillation experiments often change the teacher, data quality, training volume, and task coverage together. A better student score supports the combined workflow. Without controls, it cannot attribute every gain to knowledge transferred from the teacher.
 
-本文據此提出的基本比較，是以相同學生為起點，區分只使用原有標註的訓練、加入教師訊號的訓練，以及加入經修正教材後的訓練。若想研究教材長度，就控制其他條件；若想研究教師差異，則同時記錄教師資料的數量、品質與生成成本。
+A useful starting comparison uses the same student with the original labels, then with teacher supervision, then with corrected teaching material. For a study of response length, hold the other conditions fixed. For a teacher comparison, record the quantity and quality of generated data as well as its cost.
 
-「公平」也必須依問題定義。固定樣本數時，長推理可能讓學生看見更多訓練 token；固定 token 數時，短回答可能涵蓋更多題目；固定運算預算時，不同方法完成的更新量又會改變。沒有一種設定能一次消除所有差異，但必須說明實驗究竟固定了什麼。
+Even a fair comparison needs a stated budget. At a fixed example count, long reasoning traces give the student more training tokens. At a fixed token count, short answers may cover more problems. At a fixed compute budget, the completed update count may differ. No single choice removes every difference, so report what was held constant.
 
-此外，舊能力需要獨立量測。保留一份測試集，只是在觀察遺忘；訓練時回放舊資料，才是試圖減少遺忘的介入。兩者不能互相替代，回放比例與效果也不能在沒有測試時被視為保證。
+Earlier capabilities also need separate measurement. A retention test detects forgetting; replaying old data during training is an intervention intended to reduce it. The test does not protect anything by itself, and a replay ratio does not guarantee retention without measurement.
 
-蒸餾最值得追求的成果，因而不是學生在少數示例上模仿得多像，而是在指定任務範圍內，以可接受成本保留多少可靠能力，以及這個改善是否能在新的輸入與獨立評估中重現。
+A few examples can show that the student imitates the teacher. The stronger result is reliable performance across the intended task range, at an acceptable cost, including new inputs and independent evaluation.
 
-## 六、推論時計算：模型能力與系統成果的界線
+## 6. Test-time compute: better results from the same weights
 
-### 6.1 固定權重，也可以得到不同的任務表現
+### 6.1 The inference setup is part of the result
 
-模型大小是影響能力的重要變數，但最終輸出還取決於推論時得到的資訊、可使用的工具，以及答案如何生成與選擇。前面的知識轉移研究觀察到模型規模差異，蒸餾研究也顯示資料安排會影響結果；它們並沒有提供只靠參數數量就能計算固定智慧上限的定律。
+Model size affects capability, but the final answer also depends on the information available at inference time, the tools allowed, and how outputs are generated and selected. The knowledge-transfer and distillation studies above show differences across model sizes and training arrangements. They do not give us a formula that turns parameter count into a fixed intelligence limit.
 
-對一套固定權重，可以直接生成一次答案，也可以生成多個候選、執行測試、比較結果後再選擇。後者改善的是完整解題流程。它具有實際價值，但在沒有額外訓練時，不表示模型因這次任務而完成持久學習。
+With one set of weights, we can generate an answer once, or generate several candidates, run tests, compare them, and select a result. The latter can solve more tasks without any additional training. That is useful system improvement; it does not show that this task caused a persistent learning update.
 
-這讓模型評估出現兩個不同層次：在固定推論預算下，比較模型或訓練方法；以及在固定模型下，比較如何使用額外推論計算。把兩種結果混成一張排行榜而不交代條件，會使能力與效率的差異難以解讀。
+Keep two comparisons separate: different models or training methods under the same inference budget, and different uses of extra inference compute with the same model. Combining them in a leaderboard without the conditions makes both capability and efficiency harder to judge.
 
-### 6.2 GenCluster：額外計算需要生成、驗證與選擇機制
+### 6.2 GenCluster: generating candidates is only part of the job
 
-Samadi 等人的 **[《Scaling Test-Time Compute to Achieve IOI Gold Medal with Open-Weight Models》](https://aclanthology.org/2026.acl-long.1532/)（ACL 2026）**提出 GenCluster，結合大量候選生成、依程式行為分群、排序與提交策略。在研究設定的 IOI 2025 題目與評測條件下，這套流程使用開放權重模型取得金牌等級分數。
+Samadi et al. introduce GenCluster in [*Scaling Test-Time Compute to Achieve IOI Gold Medal with Open-Weight Models*](https://aclanthology.org/2026.acl-long.1532/) (ACL 2026). The workflow combines large-scale candidate generation, clustering by program behavior, ranking, and a submission strategy. Under the paper's evaluation conditions on IOI 2025 problems, it reaches a gold-medal-level score using open-weight models.
 
-這是完整推論與選擇流程的成果，不是單次回答的結果，也不等於模型以正式選手身分參賽獲得獎牌。其意義在於：改善最終解題表現，不一定只能透過增加參數或重新訓練實現。
+The score belongs to the full inference and selection workflow. It is not a single-response result, nor a claim that the model entered the official competition and received a medal. It does show a route to better task results without simply increasing parameter count or retraining.
 
-由此延伸到工程設計，額外推論計算至少包含兩個問題：候選答案是否足夠多樣，以及系統能否把好的候選辨識出來。
+For an engineering implementation, candidate diversity and candidate selection both matter. Ten differently worded versions of the same solution may offer little extra coverage. And even if one candidate is correct, a poor selector can still deliver a wrong answer. Measure whether a correct answer was generated and whether the system actually selected it.
 
-若一個模型生成十種文字表達，底層解法卻相同，更多候選不一定帶來更多解題機會。反過來，即使候選中存在正確答案，若排序或驗證流程無法辨識，使用者仍可能拿到錯誤輸出。因此，「曾經生成過正確答案」與「最後交付了正確答案」需要分開測量。
+Program execution and tests can provide useful verification signals. Passing the available tests still does not establish compliance with the entire specification. Before carrying the same workflow into another domain, check whether an equally useful verification signal exists. Many question-answering tasks do not come with a convenient correctness checker.
 
-程式任務可以提供執行行為與測試結果作為部分判斷依據，但通過已有測試不必然代表滿足完整規格。把這種流程移到其他領域時，也必須確認能否建立同樣可靠的判斷訊號，不能假設每種問答都具有容易取得的正確性檢查器。
+### 6.3 Longer generation can introduce new errors
 
-### 6.3 Overthinking：增加長度不等於增加有效工作
+Zhou et al. examine the limits of extra inference compute in [*When More Thinking Hurts: Overthinking in LLM Test-Time Compute Scaling*](https://aclanthology.org/2026.findings-acl.1199/) (Findings of ACL 2026). In the tested settings, longer thinking can bring diminishing returns or lead the model away from an initially correct answer. The appropriate budget also varies with problem difficulty.
 
-Zhou 等人的 **[《When More Thinking Hurts: Overthinking in LLM Test-Time Compute Scaling》](https://aclanthology.org/2026.findings-acl.1199/)（Findings of ACL 2026）**研究推論時計算增加後的限制。在受測設定中，較長思考可能出現邊際收益遞減，甚至讓模型偏離原先正確的答案；適合的推論預算也會隨問題難度而變化。
+Read alongside GenCluster, the difference is in how the extra work is used. Generating and selecting among candidates is a different strategy from extending a single generation trajectory. Longer generation alone does not guarantee better quality.
 
-這項觀察與 GenCluster 並不矛盾。GenCluster 研究如何組織額外候選與選擇流程，overthinking 研究則提醒：把同一條生成軌跡無限制拉長，不保證能提高最後品質。
+A useful design question is what the extra computation does. Another verification step might reject an answer that violates a condition. Repeatedly revising an already supported answer may only add cost and opportunities for error. The effect needs to be tested on the same task.
 
-由此可提出一項設計原則：推論預算不應只以輸出長度定義，更應說明這些計算做了哪些工作。額外的一次驗證可能有助於排除不符合條件的答案；反覆改寫同一個已成立結論，則可能只是增加成本與新的出錯機會。具體效果仍需由相同任務上的比較確認。
+Stopping is part of that design. Define when there is enough evidence, when to try a different candidate, and when to report insufficient information. Evaluate those choices with correctness, compute cost, and failure types. Raising the maximum output-token limit alone does not answer any of them.
 
-停止條件也因此成為流程的一部分。系統何時已有足夠證據？何時應產生不同候選，而不是繼續延伸原答案？何時應指出資訊不足？這些問題需要連同正確率、計算成本與失敗型態一起評估，而不只是調高最大輸出 token。
+### 6.4 Compare quality and efficiency under the same conditions
 
-### 6.4 把品質改善與效率改善放在同一組條件下
+Better answers bring the discussion back to cost.
 
-上述研究使廣義的 performance 回到一個實務問題：較好的答案需要付出多少額外工作。
+If system A generates once and system B generates multiple candidates and runs tests, B's higher success rate is a valid result. Calling B more efficient requires more measurements: total generation, tool execution, end-to-end latency, and hardware cost. Counting only the final model call misses most of the work.
 
-若方案 A 直接生成一次，方案 B 生成多個候選再執行測試，B 的成功率較高可以是一項有效成果。但要主張它更有效率，就還需要量測總生成量、工具執行、端到端延遲與硬體成本，而不能只比較最後一次模型呼叫。
+Training, retrieval, and multi-candidate inference also put their costs in different places. Data preparation and training are usually upfront investments, followed by repeated use of the resulting weights. Retrieval includes indexing and per-query work. Candidate generation and selection add work to each task. The expected number of uses, document-update frequency, and latency allowance all affect the comparison.
 
-訓練型方法也有不同的成本分布。資料整理與訓練通常是前置投入，推論時則反覆使用已得到的權重；檢索流程包含建索引與每次查詢的工作；多候選流程則會在每次任務中付出更多生成與選擇成本。因此，成本比較還與預期使用次數、資料更新頻率及允許延遲有關。
-
-作為分析框架，可以把某個使用期間的成本拆成：
+For a given period of use, a useful cost breakdown is:
 
 ```text
-總成本 ≈ 資料與前處理成本 + 訓練或建索引成本
-       + 使用次數 × 單次推論、檢索與工具成本
-       + 維護與更新成本
+total cost ≈ data preparation and preprocessing
+           + training or indexing
+           + number of uses × per-use inference, retrieval, and tool cost
+           + maintenance and updates
 ```
 
-這不是精確的效能模型，而是避免漏算成本項目的方式。實際比較仍需要指定硬體、工作負載、輸入輸出長度、併發條件與品質要求。
+The breakdown helps avoid leaving costs out; it is not a precise performance model. An actual comparison still needs the hardware, workload, input and output lengths, concurrency, and quality requirement.
 
-較有意義的驗收方式，是先訂最低品質要求，再比較達到要求的成本與延遲；或先固定資源預算，再比較能取得多少品質。沒有這個共同條件，「答得更好」「模型更小」與「系統更快」仍然是三個不同的主張。
+One practical approach is to set a minimum acceptable quality, then compare the cost and latency of meeting it. Another is to fix the resource budget and compare quality. Without a shared condition, a better answer, a smaller model, and a faster system remain separate claims.
 
-## 結語：從方法清單走向可驗證的改善
+## Closing thoughts
 
-Udemy 課程提供了訓練、壓縮、檢索與架構方法的廣泛入口。後續研究則讓這張地圖更具體：知識能否被穩定使用，與訓練資料的形式、測試情境及原有能力保留有關；蒸餾能帶走多少能力，取決於教師訊號與學生可學性；推論時計算能提高系統成果，也必須具備有效的驗證、選擇與停止機制。
+The course provides a broad introduction to training, compression, retrieval, and architecture methods. The follow-up papers are useful because they show where a promising result needs closer inspection: whether knowledge transfers to another context, whether a student can learn from the chosen teacher, or whether extra inference work actually helps select a better answer.
 
-這些研究沒有形成一個所有方法都適用的排名。它們更有用的貢獻，是指出每一種改善需要額外驗證什麼。原論文的模型、任務、資料與計算預算，都是解讀結論的一部分，不能只保留方法名稱和最高分數。
+There is no single ranking that settles those choices. The model, task, data, and compute budget are part of each result. Keeping only a method name and its highest score removes the information needed to use it responsibly.
 
-對技術選型與成果分享而言，關鍵不是把所有新方法都加進流程，而是清楚說明：**問題發生在哪個層次、介入改變了什麼、哪些證據支持收益，以及有哪些成本或能力退化尚未解決。**
-
-這樣才能將廣義的 LLM 改善，轉成可比較、可維護，也能支持工程決策的結果。
+For an engineering decision, a report should say what failed, what changed, which evidence supports the gain, and what it cost in resources or lost capability. That is how a broad claim of “better LLM performance” becomes something a team can compare, maintain, and use.
 
 ---
 
-**Udemy 課程連結：** [Improving the Performance of Your LLM Beyond Fine Tuning](https://www.udemy.com/course/improving-the-performance-of-your-llm-beyond-fine-tuning/learn/lecture/40179430?start=4#overview)
+**Udemy course:** [Improving the Performance of Your LLM Beyond Fine Tuning](https://www.udemy.com/course/improving-the-performance-of-your-llm-beyond-fine-tuning/learn/lecture/40179430?start=4#overview)
