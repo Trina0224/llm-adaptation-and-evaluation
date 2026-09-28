@@ -132,7 +132,7 @@ SFT、CPT、LoRA、蒸餾和 RAG，並不位於同一個分類層級。
 
 微調則改變模型參數。從應用角度看，兩種流程都可以用來改善同一份文件上的問答，因此比較有意義；從學習角度看，一個使用當次證據，另一個嘗試利用訓練後的記憶，則是在測不同的資訊取得方式。
 
-Ovadia 等人在 **《Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs》（EMNLP 2024）**中，比較 RAG 與非監督式微調。在所測的知識密集任務中，RAG 的表現優於該研究的微調流程；將同一事實以多種表達形式納入訓練，可以改善微調效果。值得注意的是，該文的非監督式微調是延續語言建模訓練，與 CPT 有重疊，並非一般指令問答 SFT 的代名詞。
+Ovadia 等人在 **[《Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs》](https://aclanthology.org/2024.emnlp-main.15/)（EMNLP 2024）**中，比較 RAG 與非監督式微調。在所測的知識密集任務中，RAG 的表現優於該研究的微調流程；將同一事實以多種表達形式納入訓練，可以改善微調效果。值得注意的是，該文的非監督式微調是延續語言建模訓練，與 CPT 有重疊，並非一般指令問答 SFT 的代名詞。
 
 這項研究適合回答「在這些條件下，哪種流程更能完成問答」，不能直接回答「所有模型都無法透過訓練學習新知識」。它也不能被接成「SFT 無效，所以改成 CPT 就能解決」的推論，因為被比較的訓練流程本來就可能屬於持續預訓練的範圍。
 
@@ -154,7 +154,7 @@ L_SFT = −Σ log pθ(y_t | x, y_<t)
 
 其中 `x` 是輸入，`y_t` 是答案中的目標 token。這個目標不會直接替「事實」「文風」與「推導方法」標上不同的學習類別。示例包含新事實時，模型可能取得知識；示例主要改變格式時，模型也可能主要適應格式。結果取決於資料與訓練，而不是只由 SFT 這個名稱決定。
 
-Gekhman 等人的 **《Does Fine-Tuning LLMs on New Knowledge Encourage Hallucinations?》（EMNLP 2024）**在受控的閉書問答中，改變微調資料所含新知識的比例。研究觀察到，模型原先不知道的事實學得較慢；在其設定中，當這些新事實逐漸被學會時，也伴隨更高的幻覺傾向。
+Gekhman 等人的 **[《Does Fine-Tuning LLMs on New Knowledge Encourage Hallucinations?》](https://aclanthology.org/2024.emnlp-main.444/)（EMNLP 2024）**在受控的閉書問答中，改變微調資料所含新知識的比例。研究觀察到，模型原先不知道的事實學得較慢；在其設定中，當這些新事實逐漸被學會時，也伴隨更高的幻覺傾向。
 
 這個結果指出了一項風險：把新答案教進模型，與維持模型對其他問題的可靠回答，可能不是同步改善。它沒有證明微調一定有害，也沒有建立「SFT 只能教行為」的機制定律。
 
@@ -166,7 +166,7 @@ Gekhman 等人的 **《Does Fine-Tuning LLMs on New Knowledge Encourage Hallucin
 
 新知識訓練還有一個容易低估的變數：模型究竟被要求對資訊做什麼。
 
-Jan 等人的 **《Data Doping or True Intelligence? Evaluating the Transferability of Injected Knowledge in LLMs》（Findings of EMNLP 2025）**比較相同事實透過不同任務進入微調的效果。研究摘要報告，問答與填空類任務的知識保留約為 48%，高於翻譯的 17% 與文字轉 JSON 的 20%；但跨到較廣情境使用時，受測模型仍明顯退步。這些比例屬於該研究的資料、模型與評分設定，不是通用成功率。
+Jan 等人的 **[《Data Doping or True Intelligence? Evaluating the Transferability of Injected Knowledge in LLMs》](https://aclanthology.org/2025.findings-emnlp.589/)（Findings of EMNLP 2025）**比較相同事實透過不同任務進入微調的效果。研究摘要報告，問答與填空類任務的知識保留約為 48%，高於翻譯的 17% 與文字轉 JSON 的 20%；但跨到較廣情境使用時，受測模型仍明顯退步。這些比例屬於該研究的資料、模型與評分設定，不是通用成功率。
 
 這篇研究提供的重點，不是 JSON 格式不好，而是**完成資料轉換與能在其他任務中調用資料，是不同的訓練成果**。翻譯或轉換格式本身可能正是應用目標；只是不能由這項工作完成得好，進一步推論模型已學會其中全部事實。
 
@@ -200,7 +200,7 @@ Jan 等人的 **《Data Doping or True Intelligence? Evaluating the Transferabil
 
 持續預訓練（continued／continual pretraining，以下簡稱 CPT）通常從既有模型出發，延續語言建模等訓練，以適應新語料或領域。相較於只針對特定輸出習慣的示例，它可以把訓練範圍擴展到領域用語、概念關聯與更廣的資料分布。
 
-但 CPT 與 SFT 的名稱並不能取代實際訓練定義。Chen 等人的 **《Towards Effective and Efficient Continual Pre-training of Large Language Models》（ACL 2025）**以 Llama 3 8B 探索中文與科學推理能力，使用資料混合、課程安排、表現追蹤及混合比例調整，並包含合成的科學問答資料。它並不是只把未加工文章大量輸入模型的實驗。
+但 CPT 與 SFT 的名稱並不能取代實際訓練定義。Chen 等人的 **[《Towards Effective and Efficient Continual Pre-training of Large Language Models》](https://aclanthology.org/2025.acl-long.289/)（ACL 2025）**以 Llama 3 8B 探索中文與科學推理能力，使用資料混合、課程安排、表現追蹤及混合比例調整，並包含合成的科學問答資料。它並不是只把未加工文章大量輸入模型的實驗。
 
 這個研究把焦點放在新增能力與原有能力的平衡。由此延伸，持續適應的設計至少需要同時考慮三項：新領域提供哪些學習訊號、原有分布以何種方式保留，以及何時調整或停止訓練。
 
@@ -222,7 +222,7 @@ W′ = W + sBA
 
 這種設計能減少可訓練參數及其相關狀態，但基礎模型的前向計算、中間結果與反向傳播的相關需求仍然存在。總成本還受序列長度、總訓練 token、精度與執行方式影響。只說「能放進單張 GPU」不足以描述完整訓練門檻，更不能推論它與全參數更新具有相同效果。
 
-Kim、Kang 與 Moon 在 **《DoMIX: An Efficient Framework for Exploiting Domain Knowledge in Fine-Tuning》（ACL 2025）**中，利用 LoRA 模組處理領域調適預訓練，研究計算成本、領域加入順序及不同下游任務的調適。這提供了另一個方向：領域知識的利用可以透過模組化訓練與組合設計，不必全都壓在一次順序式全參數更新上。
+Kim、Kang 與 Moon 在 **[《DoMIX: An Efficient Framework for Exploiting Domain Knowledge in Fine-Tuning》](https://aclanthology.org/2025.acl-long.710/)（ACL 2025）**中，利用 LoRA 模組處理領域調適預訓練，研究計算成本、領域加入順序及不同下游任務的調適。這提供了另一個方向：領域知識的利用可以透過模組化訓練與組合設計，不必全都壓在一次順序式全參數更新上。
 
 不過，低秩更新限制的是矩陣增量的形式，不是已知的「最多能記住多少事實」公式。若模型表現不佳，單純提高 rank 不能代替檢查教材、作用層與訓練量。對全參數 CPT 與參數高效率 CPT 的比較，除了新任務分數，也應納入舊能力、訓練時間和可重現性。
 
@@ -230,7 +230,7 @@ Kim、Kang 與 Moon 在 **《DoMIX: An Efficient Framework for Exploiting Domain
 
 ### 4.7 檢索情境訓練把兩種能力接在一起
 
-**《RAFT: Adapting Language Model to Domain Specific RAG》（2024）**把問題、相關證據與干擾文件放進訓練情境，讓模型學習使用合適的內容形成回答。這是課程中「RAG 與微調」討論的重要延伸：可以訓練的是閱讀與利用證據的行為，不必要求模型把外部文件全部背入參數。
+**[《RAFT: Adapting Language Model to Domain Specific RAG》](https://arxiv.org/abs/2403.10131)（2024）**把問題、相關證據與干擾文件放進訓練情境，讓模型學習使用合適的內容形成回答。這是課程中「RAG 與微調」討論的重要延伸：可以訓練的是閱讀與利用證據的行為，不必要求模型把外部文件全部背入參數。
 
 例如，系統已取回正確的規格文件，答案卻引用了另一個版本，問題可能不在資料缺失，而在證據選擇或條件處理。反過來，正確證據根本沒有進入候選結果時，只訓練生成模型也未必能修補檢索缺口。
 
@@ -252,7 +252,7 @@ Kim、Kang 與 Moon 在 **《DoMIX: An Efficient Framework for Exploiting Domain
 
 ### 5.2 更強教師與更長推理，不一定產生更好的學生
 
-Li 等人在 **《Small Models Struggle to Learn from Strong Reasoners》（Findings of ACL 2025）**中，研究小模型從強推理教師學習的效果。受測的 3B 級學生不一定從更長的推理文字或更大的教師取得最好結果；研究提出的 Mix Distillation 結合不同長度推理或不同教師，改善了部分設定下的學習表現。
+Li 等人在 **[《Small Models Struggle to Learn from Strong Reasoners》](https://aclanthology.org/2025.findings-acl.1301/)（Findings of ACL 2025）**中，研究小模型從強推理教師學習的效果。受測的 3B 級學生不一定從更長的推理文字或更大的教師取得最好結果；研究提出的 Mix Distillation 結合不同長度推理或不同教師，改善了部分設定下的學習表現。
 
 這篇研究把可學性（learnability）放到教師品質之外。教師能寫出正確且複雜的解法，不代表學生在既定資料量與訓練預算下，能穩定吸收同一組解法。這是實驗觀察，不是所有小模型都存在相同固定能力上限的證明。
 
@@ -294,7 +294,7 @@ Li 等人在 **《Small Models Struggle to Learn from Strong Reasoners》（Find
 
 ### 6.2 GenCluster：額外計算需要生成、驗證與選擇機制
 
-Samadi 等人的 **《Scaling Test-Time Compute to Achieve IOI Gold Medal with Open-Weight Models》（ACL 2026）**提出 GenCluster，結合大量候選生成、依程式行為分群、排序與提交策略。在研究設定的 IOI 2025 題目與評測條件下，這套流程使用開放權重模型取得金牌等級分數。
+Samadi 等人的 **[《Scaling Test-Time Compute to Achieve IOI Gold Medal with Open-Weight Models》](https://aclanthology.org/2026.acl-long.1532/)（ACL 2026）**提出 GenCluster，結合大量候選生成、依程式行為分群、排序與提交策略。在研究設定的 IOI 2025 題目與評測條件下，這套流程使用開放權重模型取得金牌等級分數。
 
 這是完整推論與選擇流程的成果，不是單次回答的結果，也不等於模型以正式選手身分參賽獲得獎牌。其意義在於：改善最終解題表現，不一定只能透過增加參數或重新訓練實現。
 
@@ -306,7 +306,7 @@ Samadi 等人的 **《Scaling Test-Time Compute to Achieve IOI Gold Medal with O
 
 ### 6.3 Overthinking：增加長度不等於增加有效工作
 
-Zhou 等人的 **《When More Thinking Hurts: Overthinking in LLM Test-Time Compute Scaling》（Findings of ACL 2026）**研究推論時計算增加後的限制。在受測設定中，較長思考可能出現邊際收益遞減，甚至讓模型偏離原先正確的答案；適合的推論預算也會隨問題難度而變化。
+Zhou 等人的 **[《When More Thinking Hurts: Overthinking in LLM Test-Time Compute Scaling》](https://aclanthology.org/2026.findings-acl.1199/)（Findings of ACL 2026）**研究推論時計算增加後的限制。在受測設定中，較長思考可能出現邊際收益遞減，甚至讓模型偏離原先正確的答案；適合的推論預算也會隨問題難度而變化。
 
 這項觀察與 GenCluster 並不矛盾。GenCluster 研究如何組織額外候選與選擇流程，overthinking 研究則提醒：把同一條生成軌跡無限制拉長，不保證能提高最後品質。
 
@@ -346,4 +346,4 @@ Udemy 課程提供了訓練、壓縮、檢索與架構方法的廣泛入口。�
 
 ---
 
-**Udemy 課程連結：待補。**
+**Udemy 課程連結：** [Improving the Performance of Your LLM Beyond Fine Tuning](https://www.udemy.com/course/improving-the-performance-of-your-llm-beyond-fine-tuning/learn/lecture/40179430?start=4#overview)
