@@ -6,7 +6,7 @@
 
 I went into this Udemy course expecting a performance-engineering workflow. The material turned out to cover a broader range of LLM adaptation methods, from fine-tuning and compression to retrieval and architecture research.
 
-After the course, I read a few papers on how models acquire knowledge and how well students learn from stronger teachers. The reading also covered test-time compute and the contribution of the inference procedure to reported performance.
+After the course, I read a few papers on how models acquire knowledge and how well students learn from stronger teachers. The reading also covered test-time compute and how much of a reported score comes from the inference procedure.
 
 ## 1. Course overview
 
@@ -42,11 +42,11 @@ Lessons 1–16 are grouped here because the outline available to me mostly uses 
 | 33 | Fine Tuning Simplistically Explained | Fine-tuning recap | What parameters changed and what the evaluation actually tests |
 | 34 | Differences Between Fine Tuning and RAG Tuning | Retrieval and fine-tuning recap | Good starting point for the knowledge-update discussion below |
 
-The first half follows a training-and-compression workflow, while the second half is closer to a set of topic updates. The later lessons include document processing and architecture changes alongside the training methods.
+The first half follows a training-and-compression workflow. The second half is closer to a set of topic updates. The later lessons include document processing and architecture changes alongside the training methods.
 
 ## 2. Grouping the methods by what they change
 
-SFT and continued pretraining describe training setups, while LoRA and QLoRA describe how updates are represented and stored. Distillation specifies the source of supervision. These choices can be combined in one run: a student trained on teacher-generated answers with LoRA is using both distillation and parameter-efficient training.
+SFT and continued pretraining describe training setups. LoRA and QLoRA describe how updates are represented and stored. Distillation specifies the source of supervision. These choices can be combined in one run: a student trained on teacher-generated answers with LoRA is using both distillation and parameter-efficient training.
 
 RAG brings external evidence into the inference path. RAFT includes that kind of evidence in the training inputs as well, so the model can learn how to use the retrieved material.
 
@@ -88,7 +88,7 @@ The example reports about 88 million parameters after pruning, compared with abo
 W_pruned = M ⊙ W
 ~~~
 
-A lower parameter count would require a step that rebuilds the network with smaller tensors. That step is missing from the evaluation excerpt. Recording the tensor parameter count and nonzero-weight count separately would make the change explicit, with inference measurements showing its effect on the target hardware.
+A lower parameter count would require a step that rebuilds the network with smaller tensors. That step is missing from the evaluation excerpt. Recording the tensor parameter count and nonzero-weight count separately would make the change explicit. Inference measurements on the target hardware would then show the effect on runtime.
 
 ### 3.2 Evaluation happens before pruning in the student example
 
@@ -161,7 +161,7 @@ A model trained to convert a sentence into JSON may extract a rule accurately an
 - Ask whether the update can start while the device is in normal mode.
 - Add an exception and see whether the model applies it only where it belongs.
 
-The last two exercises require applying a condition and handling its scope. Including them gives a domain-rule training set examples of decisions, alongside extraction and recall. Repeating only the extraction template would leave those decisions untested.
+The last two exercises require applying a condition and handling its scope. Including them adds decision examples to the training set, alongside extraction and recall. Repeating only the extraction template would leave those decisions untested.
 
 ### 4.4 Testing whether a fact transferred
 
@@ -174,9 +174,9 @@ Record the results separately for each test so a failure can be traced to the op
 
 ### 4.5 Continued pretraining and domain data
 
-Continued pretraining starts from an existing model and keeps training on new text or a new domain, usually with a language-modeling objective. It can extend adaptation across the domain's text distribution, with the training data determining which concepts and relationships the model encounters.
+Continued pretraining starts from an existing model and keeps training on new text or a new domain, usually with a language-modeling objective. The corpus determines which concepts the model encounters and how often they appear during training.
 
-Chen et al. study this in [*Towards Effective and Efficient Continual Pre-training of Large Language Models*](https://aclanthology.org/2025.acl-long.289/) (ACL 2025). Their Llama 3 8B experiments use data mixtures and curriculum choices, with performance monitoring during training. The data also includes synthetic scientific QA.
+Chen et al. study this in [*Towards Effective and Efficient Continual Pre-training of Large Language Models*](https://aclanthology.org/2025.acl-long.289/) (ACL 2025). In their Llama 3 8B experiments, they explore data mixtures and curriculum choices and track performance during training. The data also includes synthetic scientific QA.
 
 Corpus size helps estimate the training resources. Preparing the data also requires checking for duplicated passages and conflicting versions, and checking the coverage of important rules. For a model trained on hardware manuals for diagnosis, the evaluation should include questions that require interpreting a hardware condition.
 
@@ -212,7 +212,9 @@ Moving from the course's BERT/DistilBERT classification examples to generative r
 
 Li et al. studied this in [*Small Models Struggle to Learn from Strong Reasoners*](https://aclanthology.org/2025.findings-acl.1301/) (Findings of ACL 2025). In their experiments, 3B-class students did not consistently benefit most from the largest teachers or the longest reasoning traces. Their Mix Distillation approach combines different teachers or reasoning lengths and improves some settings.
 
-A long teacher response can bury the structure the student needs, while an aggressively shortened answer can omit a condition that makes the solution correct. When reviewing a training example, keep the steps that introduce necessary information or explain how a condition affects the answer. Repeated restatements of the prompt can be shortened.
+In my own 70B-to-3B distillation experiment, the student handled changed numbers on familiar questions but lost accuracy when I rephrased them. The curriculum had many examples built from the same few question structures. I ended up checking which distinctions the examples covered, such as when a unit conversion was needed, instead of simply generating more of them.
+
+In a long teacher response, a condition can get buried under repeated explanations. When shortening it, I'd keep the step that explains why that condition changes the answer.
 
 ### 5.3 Distillation experiments need clean attribution
 
@@ -220,7 +222,7 @@ A student run may introduce teacher-generated data at the same time as corrected
 
 Forgetting is measured with a retention suite; replay supplies old examples during training to try to reduce it. Keep the retention results separate from the replay configuration so readers can see both the intervention and its measured effect.
 
-Teacher comparisons also need a stated budget. Holding the number of examples fixed allows longer answers to contribute more training tokens. A fixed token budget changes how many examples fit, while a compute limit may change how many updates finish.
+Teacher comparisons also need a stated budget. Holding the number of examples fixed allows longer answers to contribute more training tokens. A fixed token budget changes how many examples fit. Under a compute limit, the number of completed updates may also vary.
 
 ## 6. Test-time compute
 
@@ -232,7 +234,7 @@ With fixed weights, a system can generate one answer or spend more computation o
 
 Samadi et al. describe GenCluster in [*Scaling Test-Time Compute to Achieve IOI Gold Medal with Open-Weight Models*](https://aclanthology.org/2026.acl-long.1532/) (ACL 2026). The workflow generates many candidate programs, groups them by behavior, ranks them, and uses a submission strategy. Under the paper's IOI 2025 evaluation setup, the complete system reaches a gold-medal-level score with open-weight models.
 
-The paper separates generation from selection. If the model produces ten versions of the same wrong idea, the candidate set offers little variety. If a correct candidate is present but the ranker misses it, the failure lies in selection. Inspecting the generated candidates makes these cases distinguishable.
+For GenCluster, I'd inspect the candidate set before increasing the compute budget. If it already contains a correct program that the ranker rejected, more generation may just add cost to the same selection failure. If the candidates repeat the same wrong approach, the next experiment should focus on generation.
 
 For program tasks, execution and tests provide evidence for selecting an answer. Applying the workflow in another domain requires a way to verify its candidates.
 
@@ -244,7 +246,7 @@ Extra inference work can go into an independent candidate or a test of a specifi
 
 ### 6.4 End-to-end cost
 
-Suppose system A calls the model once, while system B generates 32 candidates, runs tests, and ranks the survivors. A comparison should report the additional problems B solves together with the time and computation required for all 32 candidates and the selection step. Training or indexing costs also belong in the accounting:
+Suppose system A calls the model once. System B generates 32 candidates, runs tests, and ranks the survivors. A comparison should report the additional problems B solves together with the time and computation required for all 32 candidates and the selection step. Training or indexing costs also belong in the accounting:
 
 ~~~text
 total cost ≈ data preparation / preprocessing
@@ -257,7 +259,7 @@ Measure both systems on the target hardware using the same workload and quality 
 
 ## Closing notes
 
-The course introduces a wide range of adaptation methods, and the follow-up papers give more detail on where those methods can fail. The knowledge studies examine how information is used after training; the distillation work changes the teaching material itself. GenCluster adds a separate selection procedure whose contribution can be inspected in the candidate programs.
+The course introduces a wide range of adaptation methods, and the follow-up papers give more detail on where those methods can fail. The knowledge studies examine how information is used after training; the distillation study tests how students respond to different teachers and reasoning lengths. GenCluster adds a separate selection procedure whose contribution can be inspected in the candidate programs.
 
 For an internal report, I would keep the before-and-after scores next to the model checkpoints and describe the inputs used for each test. A reader should be able to rerun the comparison, including any retrieval or candidate-selection steps that contributed to the result.
 
