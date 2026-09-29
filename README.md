@@ -18,17 +18,17 @@ The later sections use papers from 2024–2026 to revisit a few course topics, e
 
 The course is broader than a conventional performance-engineering workflow.
 
-In a systems performance investigation, I would normally start with a specific workload and a baseline. Then I would measure latency, throughput, memory use, or hardware utilization, identify the bottleneck, make a targeted change, and run the same test again.
+In a systems performance investigation, the starting point is a specific workload and a baseline. Measure the bottleneck, make a targeted change, then run the same test again under the same conditions.
 
 The course often uses a different definition. A smaller model, a cheaper fine-tuning run, a better answer, or access to more current documents can all count as an improvement.
 
-That is fine, but those results need different measurements. A pruning experiment and a RAG experiment should not be judged with the same success criteria.
+Those results need different measurements. A pruning experiment may care about model size and runtime; a RAG experiment may care about evidence recall and answer grounding.
 
 ### 1.2 A map of the 34 lessons
 
 Lessons 1–16 are grouped here because the outline available to me mostly uses section and lecture numbers. The later lessons have clearer titles.
 
-| Lessons | Topic | What the course covers | What I would pay attention to |
+| Lessons | Topic | What the course covers | What to check |
 |---|---|---|---|
 | 1–16 | Training, pruning, distillation, and deployment | BERT/DistilBERT sentiment classification, training and evaluation, pruning, Spaces deployment | Baselines, model state, evaluation order, and whether the metric matches the task |
 | 17 | January 2024 Update To Fine Tuning Methods | QLoRA and lower-resource fine-tuning | Training-memory savings vs. actual task improvement |
@@ -62,7 +62,7 @@ SFT and continued pretraining describe training setups. LoRA and QLoRA describe 
 
 Those pieces can be combined. A student can be trained on teacher-generated answers with LoRA. A LoRA adapter can also be trained on domain text. RAFT adds retrieved evidence to the training setup.
 
-| Method or intervention | Main change | Persistent learned state | Typical reason to use it | First thing I would measure |
+| Method or intervention | Main change | Persistent learned state | Typical reason to use it | What to measure |
 |---|---|---|---|---|
 | Prompting / direct context | Current input | Usually none | Better instructions or temporary information | Sensitivity to wording and missing context |
 | RAG with a fixed generator | Retrieval and prompt context | External index/documents | Current or traceable information | Evidence recall and answer grounding |
@@ -108,7 +108,7 @@ W_pruned = M ⊙ W
 
 If the workflow rebuilds the network with smaller tensors, then a lower parameter count makes sense. The evaluation excerpt does not show that restructuring step.
 
-For this type of experiment I would report at least three things separately: tensor parameter count, nonzero weights, and measured inference performance on the target hardware.
+For this type of experiment, tensor parameter count, nonzero weights, and measured inference performance belong in separate columns.
 
 ### 3.2 Evaluation happens before pruning in the student example
 
@@ -128,7 +128,7 @@ The text later describes the reported accuracy as the performance of the trained
 
 The accuracy was collected before prune_model() ran.
 
-I would save each model state explicitly and test it where it exists in the workflow:
+The clean fix is to save and test each model state where it exists in the workflow:
 
 - trained student
 - pruned student
@@ -142,7 +142,7 @@ The shown Trainer setup does not include compute_metrics, yet the example output
 
 There is a second issue with the data split. The public SST-2 test labels are hidden and exposed as -1, so that split cannot directly produce a meaningful local accuracy score unless another label source or evaluation path is involved.
 
-A full notebook might contain additional setup that is missing from the handout. For a reproducible version, I would make the metric function and label source explicit in the code next to the reported number.
+If the full notebook adds missing setup, that setup belongs next to the reported number. The metric function and label source should be visible in the reproducible path.
 
 ### 3.4 What actually becomes outdated
 
@@ -152,7 +152,7 @@ That is different from a bad measurement.
 
 The pruning/evaluation examples above are interesting because the questions survive library updates. Which model state produced the score? What exactly did the size calculation count? Did the evaluation data contain valid labels?
 
-I would update APIs as needed, but I would keep those questions.
+APIs can be updated. The measurement questions stay the same.
 
 The same applies to teacher-generated training data. Before using outputs from a hosted model, the current license and service terms need to be checked. That is an implementation constraint, separate from whether distillation is technically sound.
 
@@ -168,13 +168,13 @@ answer = Mθ(question, retrieved_evidence)
 
 The new documents live outside the model and are supplied during inference. Fine-tuning changes learned parameters.
 
-I still think of RAG as an open-book setup. That is not an insult; open-book is often exactly what an engineering application wants. If the source changes weekly and the answer needs a citation, keeping the information outside the weights can be a good design.
+I still think of RAG as an open-book setup. In many engineering applications that is exactly the right choice. If the source changes weekly and the answer needs a citation, keeping the information outside the weights is practical.
 
 Ovadia et al. studied this directly in [*Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs*](https://aclanthology.org/2024.emnlp-main.15/) (EMNLP 2024). On their knowledge-intensive tasks, RAG outperformed the unsupervised fine-tuning setup they tested. Repeating the same facts in multiple forms helped the training side.
 
-One detail matters when reading the result: their “unsupervised fine-tuning” continues language-model training, so it overlaps with what we would now discuss as continued pretraining. This is why I would avoid turning the paper into a simple RAG-vs-SFT slogan.
+One detail matters when reading the result: their “unsupervised fine-tuning” continues language-model training, so it overlaps with what we would now discuss as continued pretraining. I read the paper as a comparison of concrete workflows, not as a verdict on every form of SFT.
 
-For an application review, I would ask whether the complete system answers correctly under the allowed data and latency budget. For a learning experiment, I would remove the external document and test what remains in the model.
+At the application level, test the complete system under the allowed data and latency budget. For a learning experiment, remove the external document and see what remains in the model.
 
 ### 4.2 Fine-tuning can learn facts, but the result can be fragile
 
@@ -188,7 +188,7 @@ The objective trains the target sequence. The target may contain a fact, a forma
 
 Gekhman et al. explore this in [*Does Fine-Tuning LLMs on New Knowledge Encourage Hallucinations?*](https://aclanthology.org/2024.emnlp-main.444/) (EMNLP 2024). In their controlled closed-book QA setup, facts that were new to the model were learned more slowly. As those new facts were learned, hallucination behavior elsewhere also increased in their experiments.
 
-The practical consequence is that a “knowledge update” test should include more than the newly added questions. I would also probe nearby facts, old behavior, and cases where the correct answer is “I do not have enough information.”
+A “knowledge update” test should go beyond the newly added questions. Probe nearby facts, old behavior, and cases where the right response is “I do not have enough information.”
 
 Training loss is especially easy to over-read here. A lower loss tells me the training targets became easier for the model to predict. It says very little about where the new behavior will break.
 
@@ -213,13 +213,13 @@ There are several different tests hiding inside that sentence.
 
 These are related tasks, but the last two require more than copying the fact into another representation.
 
-When I build a training set around domain rules, I would rather add these contrasts than create hundreds of number- or wording-only variations of the same template.
+For domain rules, these contrasts are more informative than hundreds of number- or wording-only variations of one template.
 
-### 4.4 What I mean by “the model learned it”
+### 4.4 Testing whether a fact transferred
 
 I no longer want one score to carry that claim.
 
-For a new rule or fact, I would check a few different failure modes:
+For a new rule or fact, I check a few different failure modes:
 
 **Recall.** Remove the source document and ask directly.
 
@@ -239,11 +239,11 @@ That gives it a broader adaptation path than a small instruction set, but the da
 
 Chen et al. study this in [*Towards Effective and Efficient Continual Pre-training of Large Language Models*](https://aclanthology.org/2025.acl-long.289/) (ACL 2025). Their Llama 3 8B experiments use data mixtures, curriculum choices, monitoring, and synthetic scientific QA. The training recipe is much more deliberate than dumping a directory of documents into a trainer.
 
-For a domain project, raw corpus size is only a rough resource number. I would also check duplication, conflicting versions, and whether important rules appear often enough to affect training.
+For a domain project, raw corpus size is only a rough resource number. Duplication, conflicting versions, and sparse coverage of important rules matter just as much.
 
-Then I would evaluate the actual task. A lower language-modeling loss on hardware manuals is interesting, but if the goal is to diagnose a hardware condition, I still need diagnosis questions.
+Then test the actual task. A lower language-modeling loss on hardware manuals is interesting; a diagnosis project still needs diagnosis questions.
 
-### 4.6 LoRA can also carry continued-pretraining updates
+### 4.6 Parameter-efficient CPT
 
 A LoRA update is commonly written as:
 
@@ -259,9 +259,9 @@ Parameter-efficient training lowers some memory costs, but the total job still d
 
 Kim, Kang, and Moon use LoRA modules for domain-adaptive pretraining in [*DoMIX: An Efficient Framework for Exploiting Domain Knowledge in Fine-Tuning*](https://aclanthology.org/2025.acl-long.710/) (ACL 2025). Their work is a good reminder that domain adaptation does not have to mean one long full-parameter training run.
 
-I would still compare the adapter approach with the actual requirement. If a small LoRA run reaches the target quality and retains the original capabilities, that may be enough. If it stalls, I would inspect the data and the task before assuming that rank is the only problem.
+The adapter approach should be judged against the actual requirement. If a small LoRA run reaches the target quality and retains the original capabilities, that may be enough. If it stalls, inspect the data and task before blaming rank.
 
-### 4.7 RAFT is about using evidence, not memorizing every document
+### 4.7 RAFT and retrieval-aware training
 
 [*RAFT: Adapting Language Model to Domain Specific RAG*](https://arxiv.org/abs/2403.10131) trains with relevant evidence and distractor documents.
 
@@ -271,7 +271,7 @@ In that case, keeping retrieval fixed while comparing the base and adapted gener
 
 ## 5. Distillation
 
-### 5.1 The teacher provides a training signal, not a downloadable capability
+### 5.1 Distillation signals
 
 “Teach the small model with a larger model” is a convenient summary, but the actual supervision has a form.
 
@@ -279,9 +279,9 @@ It might be teacher answers, probability distributions, demonstrations, scores, 
 
 This becomes important when moving from a classification example such as BERT/DistilBERT to a generative reasoning task. The student now has to deal with longer outputs, different solution paths, and more ways to be wrong.
 
-I would choose a teacher by looking at the target task first. If the teacher is unreliable on the task, a better general benchmark score will not rescue the training data.
+Teacher selection starts with the target task. If the teacher is unreliable there, a better general benchmark score will not rescue the training data.
 
-### 5.2 Stronger teachers are not always easier teachers
+### 5.2 Teacher strength and student learnability
 
 Li et al. studied this in [*Small Models Struggle to Learn from Strong Reasoners*](https://aclanthology.org/2025.findings-acl.1301/) (Findings of ACL 2025).
 
@@ -291,13 +291,13 @@ This matches a problem I have seen in practice: the best solution and the best t
 
 A very long teacher response can preserve details but also bury the structure the student needs. A short answer can be clean but leave out the condition that makes the answer correct.
 
-For training data, I would inspect whether a step introduces information the student needs. If it is only restating the prompt, it probably does not deserve much space in the target.
+For training data, each step should earn its place. A step that only restates the prompt adds length without much teaching signal.
 
 ### 5.3 Distillation experiments need clean attribution
 
 A student run often changes several things at once: new teacher data, corrected labels, broader task coverage, replay, or more training.
 
-If the final score improves, I would describe the whole training recipe unless there is an ablation that isolates one of those changes.
+If the final score improves, describe the whole training recipe unless an ablation isolates one of those changes.
 
 The same rule applies to retention. A retention suite detects regressions. Replay is a training action. I keep those as separate artifacts because one measures a problem and the other tries to fix it.
 
@@ -305,7 +305,7 @@ For teacher comparisons, the budget also needs a definition. Fixed example count
 
 ## 6. Test-time compute
 
-### 6.1 Same weights, different workflow
+### 6.1 Inference workflow and evaluation budget
 
 A model can answer once, or it can generate several candidates, run tools or tests, rank the results, and return one.
 
@@ -325,7 +325,7 @@ If the model produces ten versions of the same wrong idea, more sampling buys ve
 
 For program tasks, execution and tests give the system something concrete to work with. Other domains may not have such a clean verifier.
 
-### 6.3 More tokens can also make the answer worse
+### 6.3 Overthinking and inference budget
 
 [*When More Thinking Hurts: Overthinking in LLM Test-Time Compute Scaling*](https://aclanthology.org/2026.findings-acl.1199/) (Findings of ACL 2026) studies the other side of test-time scaling.
 
@@ -335,7 +335,7 @@ This makes me less interested in “how many thinking tokens did we allow?” an
 
 Generating an independent candidate, running a test, or checking a constraint has a clear purpose. Rewriting the same argument three more times may not.
 
-### 6.4 Cost belongs in the result
+### 6.4 End-to-end cost
 
 Suppose system A calls the model once. System B generates 32 candidates, runs tests, and ranks the survivors.
 
@@ -364,7 +364,7 @@ For distillation, I want to know what the teacher actually contributed and wheth
 
 For test-time compute, I want the complete inference workflow and its cost.
 
-That is the standard I would use for an internal engineering report: identify the workload, record exactly what changed, and keep the measurement attached to the model or system state that produced it.
+For an internal engineering report, I want the workload, the exact change, and the measurement tied to the model or system state that produced it.
 
 ---
 
